@@ -60,6 +60,8 @@ export interface MetaInsights {
   clicks: number;
   ctr: number;
   cpc: number;
+  cpm?: number;
+  cpp?: number;
   actions?: Array<{
     actionType: string;
     value: string;

@@ -3,6 +3,17 @@ import { InsightsService } from '../services/insights-service.js';
 import type { AccountService } from '../services/account-service.js';
 import type { MetaAdSet, MetaCampaign, MetaInsights } from '../types/index.js';
 
+// Access private methods for unit testing via type cast.
+type InsightsServicePrivate = InsightsService & {
+  calculateResults: (insight: MetaInsights) => number;
+  findMostSimilarCampaign: (
+    current: Pick<MetaCampaign, 'id' | 'name' | 'objective' | 'dailyBudget' | 'lifetimeBudget'>,
+    previousInsights: MetaInsights[],
+    accountCampaigns: Array<Pick<MetaCampaign, 'id' | 'name' | 'objective' | 'dailyBudget' | 'lifetimeBudget'>>,
+    accountAdSets: MetaAdSet[]
+  ) => { insight: MetaInsights; campaign: Pick<MetaCampaign, 'id' | 'name' | 'objective' | 'dailyBudget' | 'lifetimeBudget'> } | null;
+};
+
 function createInsight(input: Partial<MetaInsights> & Pick<MetaInsights, 'spend'>): MetaInsights {
   return {
     spend: input.spend,
@@ -34,6 +45,119 @@ function createCampaign(
     createdTime: input.createdTime ?? '2026-03-01T00:00:00+0000',
   };
 }
+
+describe('InsightsService.calculateResults', () => {
+  const accountService = {} as AccountService;
+  let service: InsightsServicePrivate;
+
+  beforeEach(() => {
+    service = new InsightsService('token', accountService) as InsightsServicePrivate;
+  });
+
+  it('counts only the primary action type when costPerActionType is present', () => {
+    const insight = createInsight({
+      spend: 10000,
+      actions: [
+        { actionType: 'purchase', value: '5' },
+        { actionType: 'video_view', value: '1000' },
+        { actionType: 'post_engagement', value: '500' },
+      ],
+      costPerActionType: [{ actionType: 'purchase', value: '2000' }],
+    });
+
+    expect(service.calculateResults(insight)).toBe(5);
+  });
+
+  it('falls back to summing all actions when costPerActionType is absent', () => {
+    const insight = createInsight({
+      spend: 10000,
+      actions: [
+        { actionType: 'lead', value: '10' },
+        { actionType: 'other', value: '3' },
+      ],
+    });
+
+    expect(service.calculateResults(insight)).toBe(13);
+  });
+
+  it('returns 0 when actions array is empty', () => {
+    const insight = createInsight({ spend: 5000, actions: [] });
+    expect(service.calculateResults(insight)).toBe(0);
+  });
+});
+
+describe('InsightsService budget similarity with ABO campaigns', () => {
+  const accountService = {} as AccountService;
+  let service: InsightsServicePrivate;
+
+  beforeEach(() => {
+    service = new InsightsService('token', accountService) as InsightsServicePrivate;
+  });
+
+  it('finds similar campaign when budget is at ad set level (ABO)', () => {
+    // ABO campaign: no budget on the campaign object, budget lives in the ad set.
+    const currentCampaign = createCampaign({
+      id: '100',
+      name: 'Summer Leads',
+      objective: 'OUTCOME_LEADS',
+      dailyBudget: undefined,
+      lifetimeBudget: undefined,
+    });
+
+    const candidateCampaign = createCampaign({
+      id: '200',
+      name: 'Spring Leads',
+      objective: 'OUTCOME_LEADS',
+      dailyBudget: undefined,
+      lifetimeBudget: undefined,
+    });
+
+    const previousInsights: MetaInsights[] = [
+      createInsight({
+        campaignId: '200',
+        campaignName: 'Spring Leads',
+        spend: 8000,
+        actions: [{ actionType: 'lead', value: '8' }],
+        costPerActionType: [{ actionType: 'lead', value: '1000' }],
+      }),
+    ];
+
+    // Ad sets have the budget — both campaigns have ~10000 daily at the ad set level.
+    const accountAdSets: MetaAdSet[] = [
+      {
+        id: 'as-100',
+        name: 'Summer Ad Set',
+        campaignId: '100',
+        status: 'ACTIVE',
+        dailyBudget: 10000,
+        optimizationGoal: 'LEAD_GENERATION',
+        bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+        billingEvent: 'IMPRESSIONS',
+      },
+      {
+        id: 'as-200',
+        name: 'Spring Ad Set',
+        campaignId: '200',
+        status: 'ACTIVE',
+        dailyBudget: 9500,
+        optimizationGoal: 'LEAD_GENERATION',
+        bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+        billingEvent: 'IMPRESSIONS',
+      },
+    ];
+
+    const result = service.findMostSimilarCampaign(
+      currentCampaign,
+      previousInsights,
+      [candidateCampaign],
+      accountAdSets
+    );
+
+    // Should find the candidate instead of scoring it zero for having no campaign budget.
+    expect(result).not.toBeNull();
+    expect(result?.campaign.id).toBe('200');
+  });
+});
 
 describe('InsightsService.compareTwoPeriods', () => {
   const resolveAccount = vi.fn();

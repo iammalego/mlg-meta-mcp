@@ -33,34 +33,4 @@ export class AdService {
 
     return ads;
   }
-
-  /**
-   * Create a new ad
-   *
-   * @param adSetId - Parent ad set ID
-   * @param config - Ad configuration
-   * @returns Created ad info
-   */
-  async createAd(
-    adSetId: string,
-    config: {
-      name: string;
-      creative: {
-        title?: string;
-        body?: string;
-        imageUrl?: string;
-        linkUrl?: string;
-        callToAction?: string;
-      };
-      status?: 'ACTIVE' | 'PAUSED';
-    }
-  ): Promise<{ id: string; name: string }> {
-    logger.info({ adSetId, name: config.name }, 'Creating ad');
-
-    const result = await this.client.createAd(adSetId, config);
-
-    logger.info({ adId: result.id }, 'Ad created');
-
-    return result;
-  }
 }

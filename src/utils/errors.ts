@@ -26,11 +26,14 @@ export class MetaMcpError extends Error {
 }
 
 /**
- * Classifies a Meta API HTTP error into a category
+ * Classifies a Meta API HTTP error into a category.
+ *
+ * @param originalError - Optional underlying error to attach for stack trace preservation.
  */
 export function classifyMetaError(
   statusCode: number,
-  errorData?: { message?: string; code?: number }
+  errorData?: { message?: string; code?: number },
+  originalError?: unknown
 ): MetaMcpError {
   const message = errorData?.message || 'Unknown Meta API error';
 
@@ -39,43 +42,58 @@ export function classifyMetaError(
       return new MetaMcpError(
         ErrorCategory.AUTH,
         `Invalid or expired token: ${message}`,
-        statusCode
+        statusCode,
+        originalError
       );
 
     case 403:
       return new MetaMcpError(
         ErrorCategory.AUTH,
         `Insufficient permissions: ${message}`,
-        statusCode
+        statusCode,
+        originalError
       );
 
     case 404:
       return new MetaMcpError(
         ErrorCategory.NOT_FOUND,
         `Resource not found: ${message}`,
-        statusCode
+        statusCode,
+        originalError
       );
 
     case 400:
       return new MetaMcpError(
         ErrorCategory.VALIDATION,
         `Invalid parameters: ${message}`,
-        statusCode
+        statusCode,
+        originalError
       );
 
     case 429:
       return new MetaMcpError(
         ErrorCategory.RATE_LIMIT,
         'Rate limit reached. Retrying...',
-        statusCode
+        statusCode,
+        originalError
       );
 
     case 500:
     case 502:
     case 503:
-      return new MetaMcpError(ErrorCategory.UNKNOWN, `Meta server error: ${message}`, statusCode);
+      return new MetaMcpError(
+        ErrorCategory.UNKNOWN,
+        `Meta server error: ${message}`,
+        statusCode,
+        originalError
+      );
 
     default:
-      return new MetaMcpError(ErrorCategory.UNKNOWN, `Error ${statusCode}: ${message}`, statusCode);
+      return new MetaMcpError(
+        ErrorCategory.UNKNOWN,
+        `Error ${statusCode}: ${message}`,
+        statusCode,
+        originalError
+      );
   }
 }

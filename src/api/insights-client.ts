@@ -124,10 +124,14 @@ export class InsightsClient extends MetaApiClient {
         adsetName: insight.adset_name,
         adName: insight.ad_name,
         spend: insight.spend ? parseFloat(insight.spend) : 0,
-        impressions: insight.impressions ? parseInt(insight.impressions, 10) : 0,
-        clicks: insight.clicks ? parseInt(insight.clicks, 10) : 0,
+        // Meta returns integer strings for impressions and clicks, but Math.round guards
+        // against any edge cases where the API returns a fractional string.
+        impressions: insight.impressions ? Math.round(Number(insight.impressions)) : 0,
+        clicks: insight.clicks ? Math.round(Number(insight.clicks)) : 0,
         ctr: insight.ctr ? parseFloat(insight.ctr) : 0,
         cpc: insight.cpc ? parseFloat(insight.cpc) : 0,
+        cpm: insight.cpm ? parseFloat(insight.cpm) : undefined,
+        cpp: insight.cpp ? parseFloat(insight.cpp) : undefined,
         actions: actions.length > 0 ? actions : undefined,
         costPerActionType: costPerActionType.length > 0 ? costPerActionType : undefined,
         dateStart: insight.date_start || '',

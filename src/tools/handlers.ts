@@ -84,8 +84,6 @@ export async function handleToolCall(
       // Ads
       case 'getAds':
         return await handleGetAds(parsedArgs);
-      case 'createAd':
-        return await handleCreateAd(parsedArgs);
 
       // Productivity Tools (v0.3.0)
       case 'cloneCampaign':
@@ -524,42 +522,6 @@ async function handleGetAds(args: Record<string, unknown> | undefined): Promise<
   };
 }
 
-async function handleCreateAd(args: Record<string, unknown> | undefined): Promise<CallToolResult> {
-  const adSetId = args?.adSetId as string;
-  const name = args?.name as string;
-  const creative = args?.creative as
-    | {
-        title?: string;
-        body?: string;
-        imageUrl?: string;
-        linkUrl?: string;
-        callToAction?: string;
-      }
-    | undefined;
-
-  if (!adSetId || !name || !creative) {
-    throw new MetaMcpError(
-      ErrorCategory.VALIDATION,
-      'Required parameters: adSetId, name, creative'
-    );
-  }
-
-  const result = await adService!.createAd(adSetId, {
-    name,
-    creative,
-    status: (args?.status as 'ACTIVE' | 'PAUSED') || 'PAUSED',
-  });
-
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Ad created:\n\nName: ${result.name}\nID: ${result.id}\nAd Set: ${adSetId}`,
-      },
-    ],
-  };
-}
-
 // ==================== INSIGHTS HANDLERS ====================
 
 async function handleGetInsights(
@@ -574,6 +536,51 @@ async function handleGetInsights(
     throw new MetaMcpError(ErrorCategory.VALIDATION, 'Required parameter: objectId');
   }
 
+  // For non-account levels, return a per-item breakdown so each campaign, ad set, or ad
+  // is individually visible. An aggregated single row loses per-object attribution.
+  if (level !== 'account') {
+    const items = await insightsService!.getItemizedInsights(objectId, level, datePreset, timeRange);
+
+    if (items.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `No ${level} insights found for ${objectId} in period ${datePreset || 'default'}.`,
+          },
+        ],
+      };
+    }
+
+    const lines = items.map((item, i) => {
+      const label =
+        item.campaignName || item.adsetName || item.adName || item.campaignId || `Item ${i + 1}`;
+      const spend = `$${(item.spend / 100).toFixed(2)}`;
+      const ctr = `${item.ctr.toFixed(2)}%`;
+      const period =
+        item.dateStart && item.dateStop ? ` (${item.dateStart} → ${item.dateStop})` : '';
+
+      return (
+        `${i + 1}. ${label}${period}\n` +
+        `   Spend: ${spend} | Impressions: ${item.impressions.toLocaleString()} | Clicks: ${item.clicks.toLocaleString()} | CTR: ${ctr}`
+      );
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text:
+            `Performance Metrics by ${level}\n\n` +
+            `Object: ${objectId}\n` +
+            `Period: ${datePreset || 'default'}\n\n` +
+            lines.join('\n\n'),
+        },
+      ],
+    };
+  }
+
+  // Account level: aggregate into a single summary.
   const metrics = await insightsService!.getMetrics(objectId, level, datePreset, timeRange);
 
   const spendFormatted = `$${(metrics.spend / 100).toFixed(2)}`;
@@ -704,7 +711,6 @@ async function handleCloneCampaign(
   const sourceCampaignId = args?.sourceCampaignId as string;
   const newName = args?.newName as string;
   const copyAdSets = args?.copyAdSets !== false; // Default: true
-  const copyAds = args?.copyAds === true; // Default: false
   const budgetAdjustment = (args?.budgetAdjustment as number) || 0;
 
   if (!sourceCampaignId || !newName) {
@@ -718,7 +724,6 @@ async function handleCloneCampaign(
     sourceCampaignId,
     newName,
     copyAdSets,
-    copyAds,
     budgetAdjustment
   );
 
@@ -729,8 +734,7 @@ async function handleCloneCampaign(
         text:
           `Campaign cloned successfully:\n\n` +
           `New Campaign ID: ${result.newCampaignId}\n` +
-          `Ad Sets Cloned: ${result.adSetsCloned}\n` +
-          `Ads Cloned: ${result.adsCloned}\n\n` +
+          `Ad Sets Cloned: ${result.adSetsCloned}\n\n` +
           `Note: New campaign created as PAUSED. Review and activate when ready.`,
       },
     ],
@@ -743,7 +747,6 @@ async function handleCloneAdSet(
   const sourceAdSetId = args?.sourceAdSetId as string;
   const targetCampaignId = args?.targetCampaignId as string;
   const newName = args?.newName as string | undefined;
-  const copyAds = args?.copyAds === true; // Default: false
 
   if (!sourceAdSetId || !targetCampaignId) {
     throw new MetaMcpError(
@@ -752,7 +755,7 @@ async function handleCloneAdSet(
     );
   }
 
-  const result = await adSetService!.cloneAdSet(sourceAdSetId, targetCampaignId, newName, copyAds);
+  const result = await adSetService!.cloneAdSet(sourceAdSetId, targetCampaignId, newName);
 
   return {
     content: [
@@ -762,8 +765,7 @@ async function handleCloneAdSet(
           `Ad Set cloned successfully:\n\n` +
           `New Ad Set ID: ${result.adSetId}\n` +
           `Name: ${result.adSetName}\n` +
-          `Campaign: ${targetCampaignId}\n` +
-          `Ads Cloned: ${result.adsCloned}\n\n` +
+          `Campaign: ${targetCampaignId}\n\n` +
           `Note: New ad set created as PAUSED.`,
       },
     ],

@@ -125,6 +125,23 @@ export class InsightsService {
   }
 
   /**
+   * Get raw per-item insights for a non-account level (campaign, adset, or ad).
+   *
+   * Unlike getMetrics, this returns one entry per object instead of a single aggregate,
+   * which allows callers to map metrics to individual campaigns, ad sets, or ads.
+   */
+  async getItemizedInsights(
+    objectId: string,
+    level: 'account' | 'campaign' | 'adset' | 'ad',
+    datePreset?: string,
+    timeRange?: { since: string; until: string }
+  ): Promise<MetaInsights[]> {
+    const resolvedId = await this.resolveObjectId(objectId);
+    logger.info({ resolvedId, level, datePreset }, 'Fetching itemized insights');
+    return this.client.getInsights(resolvedId, level, datePreset, timeRange);
+  }
+
+  /**
    * Compare two periods.
    *
    * Campaign comparisons use a fallback chain:
@@ -336,17 +353,28 @@ export class InsightsService {
   }
 
   /**
-   * Calculate total results from actions
+   * Calculate total results from actions, using the primary conversion event as the filter.
+   *
+   * When costPerActionType is present, its first entry identifies the campaign's primary
+   * goal (e.g. purchase, lead). Only those actions are counted to avoid inflating results
+   * with unrelated types like video views or page engagement.
+   *
+   * Falls back to summing all actions when no primary conversion type is available.
    */
   private calculateResults(insight: MetaInsights): number {
     if (!insight.actions || insight.actions.length === 0) {
       return 0;
     }
 
-    // Sum all action values
-    return insight.actions.reduce((sum, action) => {
-      return sum + parseInt(action.value, 10);
-    }, 0);
+    const primaryActionType = insight.costPerActionType?.[0]?.actionType;
+
+    if (primaryActionType) {
+      return insight.actions
+        .filter((a) => a.actionType === primaryActionType)
+        .reduce((sum, a) => sum + parseInt(a.value, 10), 0);
+    }
+
+    return insight.actions.reduce((sum, action) => sum + parseInt(action.value, 10), 0);
   }
 
   private buildPeriodComparison(
@@ -526,7 +554,8 @@ export class InsightsService {
       dominantOptimizationGoal: this.getDominantValue(
         adSets.map((adSet) => adSet.optimizationGoal)
       ),
-      budget: this.resolveCampaignBudget(campaign),
+      // Pass ad sets so ABO campaigns (budget at ad set level) are not scored as zero-budget.
+      budget: this.resolveCampaignBudget(campaign, adSets),
       bidStrategy: this.getDominantValue(adSets.map((adSet) => adSet.bidStrategy)),
       billingEvent: this.getDominantValue(adSets.map((adSet) => adSet.billingEvent)),
     };
@@ -557,9 +586,22 @@ export class InsightsService {
   }
 
   private resolveCampaignBudget(
-    campaign: Pick<MetaCampaign, 'dailyBudget' | 'lifetimeBudget'>
+    campaign: Pick<MetaCampaign, 'dailyBudget' | 'lifetimeBudget'>,
+    adSets: MetaAdSet[] = []
   ): number | undefined {
-    return campaign.dailyBudget ?? campaign.lifetimeBudget;
+    // Campaign-level budget (CBO) takes precedence.
+    if (campaign.dailyBudget) return campaign.dailyBudget;
+    if (campaign.lifetimeBudget) return campaign.lifetimeBudget;
+
+    // For ABO campaigns (budget lives at the ad set level), aggregate ad set budgets
+    // as a proxy so similarity scoring has a comparable value to work with.
+    const adSetDailyTotal = adSets.reduce((sum, a) => sum + (a.dailyBudget ?? 0), 0);
+    if (adSetDailyTotal > 0) return adSetDailyTotal;
+
+    const adSetLifetimeTotal = adSets.reduce((sum, a) => sum + (a.lifetimeBudget ?? 0), 0);
+    if (adSetLifetimeTotal > 0) return adSetLifetimeTotal;
+
+    return undefined;
   }
 
   private hasExactDefinedMatch(left?: string, right?: string): boolean {

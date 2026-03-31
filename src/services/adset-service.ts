@@ -32,14 +32,11 @@ export class AdSetService {
     status: 'ACTIVE' | 'PAUSED' | 'ALL' = 'ALL'
   ): Promise<MetaAdSet[]> {
     // Resolve if it's an account name
+    // Numeric strings are campaign IDs. act_ strings are account IDs.
+    // Anything else is treated as an account name and must resolve — throw if not found.
     let parentId = campaignIdOrAccountId;
     if (!campaignIdOrAccountId.startsWith('act_') && !/^\d+$/.test(campaignIdOrAccountId)) {
-      try {
-        parentId = await this.accountService.resolveAccount(campaignIdOrAccountId);
-      } catch {
-        // Use as-is (might be campaign ID)
-        logger.debug({ parentId: campaignIdOrAccountId }, 'Using as campaign ID');
-      }
+      parentId = await this.accountService.resolveAccount(campaignIdOrAccountId);
     }
 
     logger.info({ parentId, status }, 'Fetching ad sets');
@@ -187,35 +184,23 @@ export class AdSetService {
    * @param sourceAdSetId - Ad set to clone
    * @param targetCampaignId - Campaign to clone into
    * @param newName - Name for the cloned ad set
-   * @param copyAds - Whether to clone ads within the ad set
    * @returns Cloned ad set info
    */
   async cloneAdSet(
     sourceAdSetId: string,
     targetCampaignId: string,
-    newName?: string,
-    copyAds: boolean = false
+    newName?: string
   ): Promise<{
     adSetId: string;
     adSetName: string;
-    adsCloned: number;
   }> {
     // Get source ad set
     const sourceAdSet = await this.client.getAdSet(sourceAdSetId);
 
     const clonedName = newName || `${sourceAdSet.name} (Copy)`;
 
-    logger.info(
-      {
-        sourceAdSetId,
-        targetCampaignId,
-        newName: clonedName,
-        copyAds,
-      },
-      'Cloning ad set'
-    );
+    logger.info({ sourceAdSetId, targetCampaignId, newName: clonedName }, 'Cloning ad set');
 
-    // Create new ad set in target campaign
     const clonedAdSet = await this.client.createAdSet(targetCampaignId, {
       name: clonedName,
       dailyBudget: sourceAdSet.dailyBudget,
@@ -227,40 +212,11 @@ export class AdSetService {
       status: 'PAUSED',
     });
 
-    let adsCloned = 0;
-
-    if (copyAds) {
-      // Get ads from source ad set
-      const sourceAds = await this.client.getAds(sourceAdSetId, 'ALL');
-
-      for (const ad of sourceAds) {
-        if (ad.creative) {
-          try {
-            await this.client.createAd(clonedAdSet.id, {
-              name: ad.name,
-              creative: ad.creative,
-              status: 'PAUSED',
-            });
-            adsCloned++;
-          } catch (error) {
-            logger.warn({ adId: ad.id, error }, 'Failed to clone ad');
-          }
-        }
-      }
-    }
-
-    logger.info(
-      {
-        clonedAdSetId: clonedAdSet.id,
-        adsCloned,
-      },
-      'Ad set cloned successfully'
-    );
+    logger.info({ clonedAdSetId: clonedAdSet.id }, 'Ad set cloned successfully');
 
     return {
       adSetId: clonedAdSet.id,
       adSetName: clonedAdSet.name,
-      adsCloned,
     };
   }
 }

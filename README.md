@@ -47,7 +47,6 @@ This project aims to be more practical in day-to-day usage:
 ### Ad operations
 
 - Get ads
-- Create ads
 
 ### Insights and analysis
 
@@ -56,7 +55,7 @@ This project aims to be more practical in day-to-day usage:
 
 ### Productivity tools
 
-- Clone campaigns
+- Clone campaigns (with ad sets)
 - Clone ad sets
 - Bulk pause campaigns
 - Bulk activate campaigns
@@ -209,7 +208,6 @@ Any MCP client that supports stdio transport can run this server by starting the
 ### Ad Tools
 
 - `getAds`
-- `createAd`
 
 ### Insights Tools
 
@@ -270,14 +268,16 @@ Project status:
 Near-term priorities:
 
 - stronger test coverage for critical workflows
-- cleaner typed handler arguments from Zod schemas
 - richer insights outputs and summaries
 - continued polish for open-source release quality
+
+Planned features:
+
+- **Ad creation** — creating ads requires a valid Meta page ID and a page-linked creative payload. The current implementation does not yet support this reliably; it is tracked as a future feature.
 
 Possible future directions:
 
 - more advanced reporting and breakdowns
-- richer creative workflows
 - remote MCP support
 - broader automation and monitoring flows
 

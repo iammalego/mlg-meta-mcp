@@ -8,6 +8,7 @@
 import { GraphClient } from '../api/graph-client.js';
 import type { AccountService } from './account-service.js';
 import type { MetaCampaign } from '../types/index.js';
+import { MetaMcpError } from '../utils/errors.js';
 import { getLogger } from '../utils/logger.js';
 
 const logger = getLogger();
@@ -164,12 +165,11 @@ export class CampaignService {
   }
 
   /**
-   * Clone a campaign with all its structure
+   * Clone a campaign with all its ad sets
    *
    * @param sourceCampaignId - Campaign to clone
    * @param newName - Name for the new campaign
    * @param copyAdSets - Whether to clone adsets
-   * @param copyAds - Whether to clone ads within adsets
    * @param budgetAdjustment - Percentage to adjust budget
    * @returns New campaign ID and cloning summary
    */
@@ -177,12 +177,10 @@ export class CampaignService {
     sourceCampaignId: string,
     newName: string,
     copyAdSets: boolean = true,
-    copyAds: boolean = false,
     budgetAdjustment: number = 0
   ): Promise<{
     newCampaignId: string;
     adSetsCloned: number;
-    adsCloned: number;
   }> {
     // Get source campaign details
     const sourceCampaign = await this.client.getCampaign(sourceCampaignId);
@@ -198,7 +196,6 @@ export class CampaignService {
         sourceCampaignId,
         newName,
         copyAdSets,
-        copyAds,
         budgetAdjustment,
         accountId,
       },
@@ -229,15 +226,12 @@ export class CampaignService {
     });
 
     let adSetsCloned = 0;
-    let adsCloned = 0;
 
     if (copyAdSets) {
-      // Get adsets from source campaign
       const sourceAdSets = await this.client.getAdSets(sourceCampaignId, 'ALL');
 
       for (const adSet of sourceAdSets) {
-        // Clone adset to new campaign
-        const clonedAdSet = await this.client.createAdSet(newCampaign.id, {
+        await this.client.createAdSet(newCampaign.id, {
           name: adSet.name,
           dailyBudget:
             budgetAdjustment !== 0 && adSet.dailyBudget
@@ -255,38 +249,14 @@ export class CampaignService {
         });
 
         adSetsCloned++;
-
-        if (copyAds) {
-          // Get ads from source adset
-          const sourceAds = await this.client.getAds(adSet.id, 'ALL');
-
-          for (const ad of sourceAds) {
-            if (ad.creative) {
-              await this.client.createAd(clonedAdSet.id, {
-                name: ad.name,
-                creative: ad.creative,
-                status: 'PAUSED',
-              });
-              adsCloned++;
-            }
-          }
-        }
       }
     }
 
-    logger.info(
-      {
-        newCampaignId: newCampaign.id,
-        adSetsCloned,
-        adsCloned,
-      },
-      'Campaign cloned successfully'
-    );
+    logger.info({ newCampaignId: newCampaign.id, adSetsCloned }, 'Campaign cloned successfully');
 
     return {
       newCampaignId: newCampaign.id,
       adSetsCloned,
-      adsCloned,
     };
   }
 
@@ -340,11 +310,17 @@ export class CampaignService {
         }
       } catch (error) {
         errors++;
+        // Include HTTP status code and error category when available so the caller
+        // can distinguish token issues (401/403) from not-found errors (404).
+        const action =
+          error instanceof MetaMcpError
+            ? `error: ${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
+            : `error: ${(error as Error).message}`;
         details.push({
           id: campaignId,
           name: 'Unknown',
           status: 'ERROR',
-          action: `error: ${(error as Error).message}`,
+          action,
         });
       }
     }
@@ -410,11 +386,17 @@ export class CampaignService {
         }
       } catch (error) {
         errors++;
+        // Include HTTP status code and error category when available so the caller
+        // can distinguish token issues (401/403) from not-found errors (404).
+        const action =
+          error instanceof MetaMcpError
+            ? `error: ${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
+            : `error: ${(error as Error).message}`;
         details.push({
           id: campaignId,
           name: 'Unknown',
           status: 'ERROR',
-          action: `error: ${(error as Error).message}`,
+          action,
         });
       }
     }

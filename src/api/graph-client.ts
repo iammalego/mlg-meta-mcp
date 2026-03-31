@@ -7,6 +7,9 @@
 
 import { MetaApiClient } from './base-client.js';
 import type { MetaCampaign, MetaAdSet, MetaAd } from '../types/index.js';
+import { getLogger } from '../utils/logger.js';
+
+const logger = getLogger();
 
 // Meta API response types
 interface CampaignsResponse {
@@ -97,12 +100,6 @@ interface AdsResponse {
   };
 }
 
-interface AdResponse {
-  id: string;
-  name: string;
-  status: string;
-  [key: string]: unknown;
-}
 
 export class GraphClient extends MetaApiClient {
   // ==================== CAMPAIGN OPERATIONS ====================
@@ -275,16 +272,6 @@ export class GraphClient extends MetaApiClient {
       id: response.id,
       status: response.status,
     };
-  }
-
-  /**
-   * Delete a campaign
-   *
-   * Endpoint: DELETE /{campaign-id}
-   */
-  async deleteCampaign(campaignId: string): Promise<{ success: boolean }> {
-    await this.updateCampaignStatus(campaignId, 'PAUSED');
-    return { success: true };
   }
 
   // ==================== ADSET OPERATIONS ====================
@@ -515,61 +502,6 @@ export class GraphClient extends MetaApiClient {
   }
 
   /**
-   * Create a new ad
-   *
-   * Endpoint: POST /{adset-id}/ads
-   */
-  async createAd(
-    adSetId: string,
-    config: {
-      name: string;
-      creative: {
-        title?: string;
-        body?: string;
-        imageUrl?: string;
-        linkUrl?: string;
-        callToAction?: string;
-      };
-      status?: 'ACTIVE' | 'PAUSED';
-    }
-  ): Promise<{ id: string; name: string }> {
-    // Build creative object
-    const creative: Record<string, unknown> = {
-      object_story_spec: {
-        page_id: '', // Required but often set at ad account level
-        link_data: {
-          name: config.creative.title,
-          message: config.creative.body,
-          link: config.creative.linkUrl,
-        },
-      },
-    };
-
-    if (config.creative.callToAction) {
-      (creative.object_story_spec as Record<string, unknown>).link_data = {
-        ...((creative.object_story_spec as Record<string, unknown>).link_data as object),
-        call_to_action: {
-          type: config.creative.callToAction,
-        },
-      };
-    }
-
-    const body: Record<string, unknown> = {
-      name: config.name,
-      adset_id: adSetId,
-      status: config.status || 'PAUSED',
-      creative,
-    };
-
-    const response = await this.post<AdResponse>(`${adSetId}/ads`, body);
-
-    return {
-      id: response.id,
-      name: response.name,
-    };
-  }
-
-  /**
    * Get campaign insights for alert checking
    *
    * Endpoint: GET /{campaign-id}/insights
@@ -604,20 +536,24 @@ export class GraphClient extends MetaApiClient {
       const spend = insight.spend ? parseFloat(insight.spend) : 0;
       const ctr = insight.ctr ? parseFloat(insight.ctr) : 0;
 
-      // Calculate results from actions
+      // Use the primary conversion event from cost_per_action_type to count only
+      // the campaign's actual goal actions. Summing all action types inflates results
+      // by including video views, page engagement, and other non-goal events.
+      const primaryActionType = insight.cost_per_action_type?.[0]?.action_type;
       let results = 0;
+
       if (insight.actions) {
-        results = insight.actions.reduce((sum, action) => {
-          return sum + parseInt(action.value, 10);
-        }, 0);
+        const targetActions = primaryActionType
+          ? insight.actions.filter((a) => a.action_type === primaryActionType)
+          : insight.actions;
+        results = targetActions.reduce((sum, a) => sum + parseInt(a.value, 10), 0);
       }
 
-      // Calculate CPR
+      // Calculate CPR from actual results; fall back to Meta's reported cost if no results.
       let cpr = 0;
       if (results > 0) {
         cpr = spend / results;
       } else if (insight.cost_per_action_type && insight.cost_per_action_type.length > 0) {
-        // Use first available cost per action
         cpr = parseFloat(insight.cost_per_action_type[0].value);
       }
 
@@ -627,7 +563,8 @@ export class GraphClient extends MetaApiClient {
         ctr,
         results,
       };
-    } catch {
+    } catch (error) {
+      logger.error({ campaignId, error }, 'getCampaignInsights failed');
       return null;
     }
   }

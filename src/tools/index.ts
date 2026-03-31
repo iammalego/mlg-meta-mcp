@@ -33,14 +33,6 @@ const timeRangeSchema = z.object({
   until: z.string().describe('End date (YYYY-MM-DD)'),
 });
 
-const creativeSchema = z.object({
-  title: z.string().optional().describe('Ad headline'),
-  body: z.string().optional().describe('Ad body text'),
-  imageUrl: z.string().optional().describe('Image URL'),
-  linkUrl: z.string().optional().describe('Destination URL'),
-  callToAction: z.string().optional().describe('CTA button (LEARN_MORE, SHOP_NOW, etc)'),
-});
-
 const targetingSchema = z
   .record(z.unknown())
   .describe('Targeting configuration (geo_locations, age_min, age_max, etc)');
@@ -189,15 +181,6 @@ const toolRegistry = {
         message: 'Either adSetId or campaignId is required.',
       }),
   },
-  createAd: {
-    description: 'Create a new ad within an ad set. Requires creative configuration.',
-    schema: z.object({
-      adSetId: z.string().describe('Parent ad set ID'),
-      name: z.string().describe('Ad name'),
-      creative: creativeSchema.describe('Ad creative configuration (title, body, image_url, etc)'),
-      status: campaignStatusSchema.optional().default('PAUSED').describe('Initial status'),
-    }),
-  },
   // Insights Tools
   getInsights: {
     description:
@@ -230,7 +213,7 @@ const toolRegistry = {
   // Productivity Tools (v0.3.0)
   cloneCampaign: {
     description:
-      'Clone an existing campaign with a new name. Optionally clone all adsets and ads within the campaign. Useful for duplicating successful campaign structures.',
+      'Clone an existing campaign with a new name. Optionally clone all ad sets within the campaign. Useful for duplicating successful campaign structures.',
     schema: z.object({
       sourceCampaignId: z.string().describe('Campaign ID to clone'),
       newName: z.string().describe('Name for the new campaign'),
@@ -238,12 +221,7 @@ const toolRegistry = {
         .boolean()
         .optional()
         .default(true)
-        .describe('Clone all adsets from the source campaign. Default: true'),
-      copyAds: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe('Clone all ads from the source adsets. Default: false'),
+        .describe('Clone all ad sets from the source campaign. Default: true'),
       budgetAdjustment: z
         .number()
         .optional()
@@ -255,21 +233,16 @@ const toolRegistry = {
   },
   cloneAdSet: {
     description:
-      'Clone an existing adset to the same or different campaign. Copies targeting, budget, and all configuration.',
+      'Clone an existing ad set to the same or different campaign. Copies targeting, budget, and all configuration.',
     schema: z.object({
-      sourceAdSetId: z.string().describe('AdSet ID to clone'),
+      sourceAdSetId: z.string().describe('Ad set ID to clone'),
       targetCampaignId: z
         .string()
         .describe('Campaign ID to create the clone in (can be same as source)'),
       newName: z
         .string()
         .optional()
-        .describe('Name for the new adset. Default: "{original_name} (Copy)"'),
-      copyAds: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe('Clone all ads from the source adset. Default: false'),
+        .describe('Name for the new ad set. Default: "{original_name} (Copy)"'),
     }),
   },
   bulkPauseCampaigns: {
