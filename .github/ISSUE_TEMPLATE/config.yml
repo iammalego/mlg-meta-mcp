@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Project documentation
+    url: https://github.com/iammalego/mlg-meta-mcp#readme
+    about: Start with the README and project docs before opening a generic issue.

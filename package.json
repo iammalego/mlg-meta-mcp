@@ -1,0 +1,69 @@
+{
+  "name": "mlg-meta-mcp",
+  "version": "0.1.0",
+  "description": "Open-source MCP server for Meta Ads with account discovery, campaign operations, insights, and LLM-friendly comparison workflows",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "mlg-meta-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src/ --ext .ts",
+    "lint:fix": "eslint src/ --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "meta",
+    "meta-ads",
+    "facebook",
+    "facebook-ads",
+    "ads",
+    "marketing-api",
+    "model-context-protocol",
+    "typescript",
+    "zod",
+    "claude",
+    "cursor",
+    "ai"
+  ],
+  "author": "iammalego",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iammalego/mlg-meta-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/iammalego/mlg-meta-mcp/issues"
+  },
+  "homepage": "https://github.com/iammalego/mlg-meta-mcp#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.2",
+    "dotenv": "^17.3.1",
+    "pino": "^10.3.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "@typescript-eslint/eslint-plugin": "^8.28.0",
+    "@typescript-eslint/parser": "^8.28.0",
+    "eslint": "^9.23.0",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

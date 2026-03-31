@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a reproducible problem in the MCP server
+title: '[Bug]: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+        Please provide enough detail to reproduce the issue without guesswork.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly and concretely.
+      placeholder: compareTwoPeriods returns a no_reference response even when the campaign had data in the previous period.
+    validations:
+      required: true
+
+  - type: input
+    id: affected-tool
+    attributes:
+      label: Affected tool
+      description: Which MCP tool is affected?
+      placeholder: compareTwoPeriods
+    validations:
+      required: true
+
+  - type: textarea
+    id: tool-arguments
+    attributes:
+      label: Tool arguments or triggering prompt
+      description: Paste the MCP arguments or the prompt that led to the tool call.
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps needed to trigger the issue.
+      placeholder: |
+        1. Call compareTwoPeriods with...
+        2. Use level=campaign and currentPeriod=...
+        3. Observe the output...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What did the tool return instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: Paste any logs, stack traces, or relevant output.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Share the environment if relevant.
+      placeholder: Node 20, Claude Desktop, local stdio MCP server
+    validations:
+      required: false

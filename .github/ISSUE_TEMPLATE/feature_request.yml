@@ -1,0 +1,52 @@
+name: Feature request
+description: Suggest a new capability or improvement for the MCP server
+title: '[Feature]: '
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for new capabilities, tool improvements, or DX improvements.
+        Focus on the real problem first, not only the solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What real limitation or pain point are you hitting?
+      placeholder: I can get insights, but I cannot ask the MCP for campaign breakdowns by age or country.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the tool, behavior, or API you would like to have.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Real use case
+      description: Explain how this would be used in a real workflow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What are you doing today as a workaround, or what alternatives did you consider?
+    validations:
+      required: false
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example prompts, tool calls, or outputs
+      description: Include examples if they help clarify the request.
+    validations:
+      required: false

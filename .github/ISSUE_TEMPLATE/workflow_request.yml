@@ -1,0 +1,56 @@
+name: Workflow request
+description: Propose a higher-level LLM or operator workflow the MCP should support better
+title: '[Workflow]: '
+labels:
+  - workflow
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when the gap is not just one missing tool, but a whole workflow that should feel better for agents or operators.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Workflow goal
+      description: What are you ultimately trying to achieve?
+      placeholder: I want an agent to review yesterday's campaign performance, detect issues, and suggest safe next actions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-flow
+    attributes:
+      label: Current workflow
+      description: How are you doing this today?
+      placeholder: |
+        1. Call discoverAdAccounts
+        2. Call getCampaigns
+        3. Call getInsights on each campaign
+        4. Manually interpret the output
+    validations:
+      required: true
+
+  - type: textarea
+    id: pain
+    attributes:
+      label: Where the workflow breaks down
+      description: What makes the current workflow slow, fragile, or hard for agents?
+    validations:
+      required: true
+
+  - type: textarea
+    id: ideal
+    attributes:
+      label: Ideal workflow
+      description: What would the ideal MCP-assisted workflow look like?
+    validations:
+      required: true
+
+  - type: textarea
+    id: related-tools
+    attributes:
+      label: Related tools or missing capabilities
+      description: Mention existing tools involved or capabilities that are missing.
+    validations:
+      required: false
