@@ -276,7 +276,7 @@ async function handleCreateCampaign(
   const accountId = args?.accountId as string;
   const name = args?.name as string;
   const objective = args?.objective as string;
-  const status = (args?.status as 'ACTIVE' | 'PAUSED') || 'PAUSED';
+  const status = args?.status as 'ACTIVE' | 'PAUSED';
   const dailyBudget = args?.dailyBudget as number | undefined;
   const lifetimeBudget = args?.lifetimeBudget as number | undefined;
 
@@ -833,7 +833,7 @@ async function handleCompareTwoPeriods(
   const previousPeriod = args?.previousPeriod as FlexiblePeriodInput;
   const resultMode = args?.resultMode as CompareTwoPeriodsOptions['resultMode'];
   const resultActionType = args?.resultActionType as string | undefined;
-  const metrics = args?.metrics as CompareTwoPeriodsMetric[] | undefined;
+  const metrics = args?.metrics as CompareTwoPeriodsMetric[];
 
   const comparison = await insightsService!.compareTwoPeriods(objectId, level, {
     currentPeriod,

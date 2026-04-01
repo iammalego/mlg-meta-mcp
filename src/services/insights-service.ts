@@ -603,10 +603,10 @@ export class InsightsService {
     if (primaryActionType) {
       return insight.actions
         .filter((a) => a.actionType === primaryActionType)
-        .reduce((sum, a) => sum + parseInt(a.value, 10), 0);
+        .reduce((sum, a) => sum + (Number(a.value) || 0), 0);
     }
 
-    return insight.actions.reduce((sum, action) => sum + parseInt(action.value, 10), 0);
+    return insight.actions.reduce((sum, action) => sum + (Number(action.value) || 0), 0);
   }
 
   private buildPeriodComparison(

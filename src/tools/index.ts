@@ -189,7 +189,7 @@ const toolRegistry = {
           'OUTCOME_APP_PROMOTION',
         ])
         .describe('Campaign objective'),
-      status: campaignStatusSchema.describe('Initial campaign status'),
+      status: campaignStatusSchema.optional().default('PAUSED').describe('Initial campaign status. Defaults to PAUSED.'),
       dailyBudget: z.number().optional().describe('Daily budget in cents (e.g., 5000 = $50.00)'),
       lifetimeBudget: z.number().optional().describe('Lifetime budget in cents'),
     }),
