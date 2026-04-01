@@ -638,8 +638,13 @@ describe('InsightsService.compareTwoPeriods', () => {
     getCampaign.mockResolvedValue(currentCampaign);
     getCampaigns.mockResolvedValue([]);
     getAdSets.mockResolvedValue([]);
-    // No data anywhere in the previous period
-    getInsights.mockResolvedValue([]);
+    getInsights.mockImplementation(async (objectId: string, level: string, period?: string) => {
+      if (objectId === '123' && level === 'campaign' && period === 'last_7d') {
+        return currentInsights;
+      }
+      // No data anywhere in the previous period
+      return [];
+    });
 
     const result = await service.compareTwoPeriods('123', 'campaign', {
       currentPeriod: { datePreset: 'last_7d' },
