@@ -11,7 +11,16 @@ This document explains how `mlg-meta-mcp` handles MCP requests today and where p
 5. `parseToolArgs()` validates inputs against the Zod schema defined in the tool registry.
 6. The selected handler calls a service layer method.
 7. Services use one or more API clients to talk to the Meta Marketing API.
-8. The handler formats the final MCP text response for the client.
+8. The handler returns the final MCP response envelope for the client, including readable text and structured content when useful.
+
+## Core contract principle
+
+Core MCP tool contracts must stay neutral and preserve maximal useful signal.
+
+- Consumers (LLMs, apps, UI layers, prompts) own filtering and interpretation.
+- Handlers may add ergonomic summaries and readable formatting.
+- Handlers must not destructively remove useful signal just to optimize for one author's workflow.
+- Project-specific business rules belong in higher-level workflows or service logic, not in the base contract shape.
 
 ## Zod-first tool registry
 
@@ -36,13 +45,14 @@ That means documentation, validation, and MCP discovery should all stay aligned 
 ### Tool registry and handlers
 
 - `src/tools/index.ts`
-  - defines all 20 public tools
+  - defines all 19 public tools
   - exports MCP-friendly schemas
   - enforces argument validation
 - `src/tools/handlers.ts`
   - routes tool calls by name
-  - keeps MCP-facing formatting in one place
-  - translates service results into concise text responses
+  - keeps MCP-facing response shaping in one place
+  - can return concise text summaries and structured content together
+  - should preserve service signal instead of filtering it down to one preferred workflow
 
 ### Service layer
 
@@ -91,6 +101,8 @@ For campaign comparisons, the service combines:
 - current and previous period insights from `InsightsClient`
 - sibling campaign and ad set metadata from the same account
 
+It also resolves one explicit result definition for the comparison (`primary_from_insights`, `specific_action`, or `all_actions`) so both periods use the same result meaning, while letting the handler filter the rendered metric set to the requested/default metrics.
+
 ## Campaign fallback behavior
 
 For `level=campaign`, the comparison uses this order:
@@ -116,8 +128,8 @@ Valid candidates are then ranked by:
 
 When changing public behavior:
 
-1. update the Zod schema in `src/tools/index.ts`
-2. update handler formatting if the response shape changed
+1. update the Zod schema and tool description in `src/tools/index.ts`
+2. update handler response shaping if the response envelope changed
 3. update service logic if the business rule changed
 4. update `README.md` and `docs/api.md` so public docs stay accurate
 

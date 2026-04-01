@@ -21,6 +21,15 @@ This project aims to be more practical in day-to-day usage:
 - **LLM-friendly responses** that summarize what happened and why it matters
 - **Structured comparison logic** for period-over-period analysis
 
+## Contract design principle
+
+Core MCP tools should return maximal useful signal for the broadest set of consumers.
+
+- consumers (LLMs, apps, prompts, UI layers) own filtering and interpretation
+- formatting and ergonomic summaries are good
+- destructive filtering of useful signal in the base tool contract is not
+- project-specific business rules should live in higher-level workflows, not in neutral core tool outputs
+
 ## What it includes today
 
 ### Account discovery
@@ -80,6 +89,30 @@ This MCP is especially useful for these workflows:
 - `campaign`
 - `adset`
 - `ad`
+
+Each side now accepts either:
+
+- `datePreset` (`today`, `yesterday`, `last_7d`, `last_30d`, `this_month`, `last_month`)
+- `timeRange` with `{ since, until }` in `YYYY-MM-DD` format
+
+The tool also supports explicit result selection:
+
+- `primary_from_insights` (default) — resolve one action type from the insights and apply it to both periods
+- `specific_action` — compare one explicit Meta `action_type` like `lead` or `purchase`
+- `all_actions` — sum all action types
+
+It also supports optional metric selection:
+
+- `spend`
+- `results`
+- `cpr`
+- `impressions`
+- `clicks`
+- `ctr`
+
+If `metrics` is omitted, the tool keeps the backward-compatible default set: `spend`, `results`, and `cpr`.
+
+The response now makes the resolved result definition explicit so consumers can see what `results` means.
 
 ### For `account`, `adset`, and `ad`
 
@@ -239,12 +272,16 @@ These are the kinds of prompts this MCP is designed to support well:
 The codebase is intentionally split into layers:
 
 - `src/tools/index.ts` → MCP tool definitions and Zod-first schemas
-- `src/tools/handlers.ts` → MCP-facing handlers and presentation formatting
+- `src/tools/handlers.ts` → MCP-facing handlers and MCP response envelopes (text summaries plus structured content when useful)
 - `src/services/*` → business logic
 - `src/api/*` → Meta API clients
 - `src/types/*` → shared types
 
 This separation helps keep the MCP surface, business logic, and Meta API integration independent.
+
+For example, `getInsights` keeps a readable text summary, but non-account levels also preserve itemized structured metrics so clients can do their own ranking, filtering, and interpretation.
+
+`compareTwoPeriods` follows the same idea: text output only includes the requested (or defaulted) metrics, while `structuredContent.metrics` exposes both the requested metric list and the returned per-metric values/change objects.
 
 ## Quality and project status
 

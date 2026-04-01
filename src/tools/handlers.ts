@@ -13,9 +13,78 @@ import { InsightsService } from '../services/insights-service.js';
 import { getLogger } from '../utils/logger.js';
 import { MetaMcpError, ErrorCategory } from '../utils/errors.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  CompareTwoPeriodsOptions,
+  FlexiblePeriodInput,
+  ItemizedInsight,
+  MetricChange,
+  PeriodComparison,
+} from '../services/insights-service.js';
+import { COMPARE_TWO_PERIODS_SIGNIFICANT_CHANGE_THRESHOLD } from '../services/insights-service.js';
+import {
+  compareTwoPeriodsIncludesResultMetrics,
+  compareTwoPeriodsMetricMetadata,
+  type CompareTwoPeriodsMetric,
+  type CompareTwoPeriodsMetricUnit,
+} from '../utils/compare-two-periods.js';
 import { parseToolArgs } from './index.js';
 
 const logger = getLogger();
+
+interface ItemizedInsightsStructuredContent extends Record<string, unknown> {
+  objectId: string;
+  level: 'campaign' | 'adset' | 'ad';
+  requestedPeriod: string | null;
+  requestedTimeRange: { since: string; until: string } | null;
+  summary: {
+    itemCount: number;
+    dateRange: string;
+    totals: {
+      spend: number;
+      results: number;
+      cpr: number;
+      impressions: number;
+      clicks: number;
+      ctr: number;
+    };
+  };
+  items: ItemizedInsight[];
+}
+
+interface CompareTwoPeriodsStructuredContent extends Record<string, unknown> {
+  objectId: string;
+  level: 'account' | 'campaign' | 'adset' | 'ad';
+  currentPeriod: {
+    requested: FlexiblePeriodInput;
+    dateRange: string | null;
+  };
+  previousPeriod: {
+    requested: FlexiblePeriodInput;
+    dateRange: string | null;
+  };
+  resultDefinition: PeriodComparison['resultDefinition'];
+  comparisonContext: {
+    resultResolutionFallback: boolean;
+    resultResolutionSource: PeriodComparison['resultDefinition']['resolutionSource'] | null;
+    significanceThresholdPercentage: number;
+  };
+  reference: PeriodComparison['reference'];
+  metrics: {
+    requested: PeriodComparison['requestedMetrics'];
+    returned: Partial<
+      Record<
+        CompareTwoPeriodsMetric,
+        {
+          label: string;
+          unit: CompareTwoPeriodsMetricUnit;
+          current: number;
+          previous: number;
+          change: MetricChange;
+        }
+      >
+    >;
+  };
+}
 
 // Service singletons (initialized once)
 let accountService: AccountService | null = null;
@@ -539,7 +608,12 @@ async function handleGetInsights(
   // For non-account levels, return a per-item breakdown so each campaign, ad set, or ad
   // is individually visible. An aggregated single row loses per-object attribution.
   if (level !== 'account') {
-    const items = await insightsService!.getItemizedInsights(objectId, level, datePreset, timeRange);
+    const items = await insightsService!.getItemizedInsights(
+      objectId,
+      level,
+      datePreset,
+      timeRange
+    );
 
     if (items.length === 0) {
       return {
@@ -552,28 +626,40 @@ async function handleGetInsights(
       };
     }
 
+    const structuredContent = buildItemizedInsightsStructuredContent(
+      objectId,
+      level,
+      datePreset,
+      timeRange,
+      items
+    );
+
     const lines = items.map((item, i) => {
-      const label =
-        item.campaignName || item.adsetName || item.adName || item.campaignId || `Item ${i + 1}`;
-      const spend = `$${(item.spend / 100).toFixed(2)}`;
+      const spend = formatCurrency(item.spend);
+      const cpr = item.cpr > 0 ? formatCurrency(item.cpr) : 'N/A';
       const ctr = `${item.ctr.toFixed(2)}%`;
-      const period =
-        item.dateStart && item.dateStop ? ` (${item.dateStart} → ${item.dateStop})` : '';
+      const period = item.dateRange ? ` (${item.dateRange})` : '';
 
       return (
-        `${i + 1}. ${label}${period}\n` +
-        `   Spend: ${spend} | Impressions: ${item.impressions.toLocaleString()} | Clicks: ${item.clicks.toLocaleString()} | CTR: ${ctr}`
+        `${i + 1}. ${item.name}${period}\n` +
+        `   ID: ${item.id} | Spend: ${spend} | Results: ${formatMetricNumber(item.results)} | CPR: ${cpr}\n` +
+        `   Impressions: ${item.impressions.toLocaleString()} | Clicks: ${item.clicks.toLocaleString()} | CTR: ${ctr}`
       );
     });
 
     return {
+      structuredContent,
       content: [
         {
           type: 'text',
           text:
             `Performance Metrics by ${level}\n\n` +
             `Object: ${objectId}\n` +
-            `Period: ${datePreset || 'default'}\n\n` +
+            `Period: ${formatRequestedPeriod({ datePreset, timeRange })}\n` +
+            `Items: ${structuredContent.summary.itemCount}\n` +
+            `Total Spend: ${formatCurrency(structuredContent.summary.totals.spend)}\n` +
+            `Total Results: ${formatMetricNumber(structuredContent.summary.totals.results)}\n` +
+            `Average CPR: ${structuredContent.summary.totals.cpr > 0 ? formatCurrency(structuredContent.summary.totals.cpr) : 'N/A'}\n\n` +
             lines.join('\n\n'),
         },
       ],
@@ -606,98 +692,244 @@ async function handleGetInsights(
   };
 }
 
+function buildItemizedInsightsStructuredContent(
+  objectId: string,
+  level: 'campaign' | 'adset' | 'ad',
+  datePreset: string | undefined,
+  timeRange: { since: string; until: string } | undefined,
+  items: ItemizedInsight[]
+): ItemizedInsightsStructuredContent {
+  const totals = items.reduce(
+    (acc, item) => ({
+      spend: acc.spend + item.spend,
+      results: acc.results + item.results,
+      impressions: acc.impressions + item.impressions,
+      clicks: acc.clicks + item.clicks,
+    }),
+    {
+      spend: 0,
+      results: 0,
+      impressions: 0,
+      clicks: 0,
+    }
+  );
+
+  const ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
+  const cpr = totals.results > 0 ? totals.spend / totals.results : 0;
+
+  return {
+    objectId,
+    level,
+    requestedPeriod: datePreset || null,
+    requestedTimeRange: timeRange || null,
+    summary: {
+      itemCount: items.length,
+      dateRange: items[0]?.dateRange || '',
+      totals: {
+        spend: totals.spend,
+        results: totals.results,
+        cpr,
+        impressions: totals.impressions,
+        clicks: totals.clicks,
+        ctr: Math.round(ctr * 100) / 100,
+      },
+    },
+    items,
+  };
+}
+
+function formatCurrency(value: number): string {
+  return `$${(value / 100).toFixed(2)}`;
+}
+
+function formatMetricNumber(value: number): string {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(2);
+}
+
+function formatRequestedPeriod(period: FlexiblePeriodInput): string {
+  if (period.timeRange) {
+    return `${period.timeRange.since} → ${period.timeRange.until}`;
+  }
+
+  return period.datePreset || 'default';
+}
+
+function formatMetricValue(metric: CompareTwoPeriodsMetric, value: number): string {
+  switch (metric) {
+    case 'spend':
+    case 'cpr':
+      return formatCurrency(value);
+    case 'ctr':
+      return `${value.toFixed(2)}%`;
+    default:
+      return formatMetricNumber(value);
+  }
+}
+
+function formatMetricAbsoluteChange(metric: CompareTwoPeriodsMetric, value: number): string {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  const absolute = Math.abs(value);
+
+  switch (metric) {
+    case 'spend':
+    case 'cpr':
+      return `${sign}${formatCurrency(absolute)}`;
+    case 'ctr':
+      return `${sign}${absolute.toFixed(2)} pts`;
+    default:
+      return `${sign}${formatMetricNumber(absolute)}`;
+  }
+}
+
+function formatMetricPercentageChange(value: number): string {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return `${sign}${Math.abs(value).toFixed(2)}%`;
+}
+
+function getMetricDirectionArrow(direction: 'up' | 'down' | 'same'): string {
+  if (direction === 'up') return '↑';
+  if (direction === 'down') return '↓';
+  return '→';
+}
+
+function buildComparedMetrics(
+  comparison: PeriodComparison
+): CompareTwoPeriodsStructuredContent['metrics']['returned'] {
+  return comparison.requestedMetrics.reduce<
+    CompareTwoPeriodsStructuredContent['metrics']['returned']
+  >((acc, metric) => {
+    const change = comparison.changes[metric];
+
+    if (!change) {
+      return acc;
+    }
+
+    acc[metric] = {
+      ...compareTwoPeriodsMetricMetadata[metric],
+      current: comparison.current[metric],
+      previous: comparison.previous[metric],
+      change,
+    };
+
+    return acc;
+  }, {});
+}
+
+function isCompareTwoPeriodsFallbackApplied(
+  resultDefinition: PeriodComparison['resultDefinition']
+): boolean {
+  return (
+    resultDefinition.resolutionSource === 'previous_primary_action' ||
+    resultDefinition.resolutionSource === 'all_actions_fallback'
+  );
+}
+
 async function handleCompareTwoPeriods(
   args: Record<string, unknown> | undefined
 ): Promise<CallToolResult> {
   const objectId = args?.objectId as string;
   const level = (args?.level as 'account' | 'campaign' | 'adset' | 'ad') || 'account';
-  const currentPeriod = args?.currentPeriod as string;
-  const previousPeriod = args?.previousPeriod as string;
+  const currentPeriod = args?.currentPeriod as FlexiblePeriodInput;
+  const previousPeriod = args?.previousPeriod as FlexiblePeriodInput;
+  const resultMode = args?.resultMode as CompareTwoPeriodsOptions['resultMode'];
+  const resultActionType = args?.resultActionType as string | undefined;
+  const metrics = args?.metrics as CompareTwoPeriodsMetric[] | undefined;
 
-  if (!objectId || !currentPeriod || !previousPeriod) {
-    throw new MetaMcpError(
-      ErrorCategory.VALIDATION,
-      'Required parameters: objectId, currentPeriod, previousPeriod'
-    );
-  }
+  const comparison = await insightsService!.compareTwoPeriods(objectId, level, {
+    currentPeriod,
+    previousPeriod,
+    resultMode,
+    resultActionType,
+    metrics,
+  });
 
-  const comparison = await insightsService!.compareTwoPeriods(
+  const resultResolutionFallback = isCompareTwoPeriodsFallbackApplied(comparison.resultDefinition);
+
+  const structuredContent: CompareTwoPeriodsStructuredContent = {
     objectId,
     level,
-    currentPeriod,
-    previousPeriod
+    currentPeriod: {
+      requested: currentPeriod,
+      dateRange: comparison.current.dateRange || null,
+    },
+    previousPeriod: {
+      requested: previousPeriod,
+      dateRange: comparison.previous.dateRange || null,
+    },
+    resultDefinition: comparison.resultDefinition,
+    comparisonContext: {
+      resultResolutionFallback,
+      resultResolutionSource: resultResolutionFallback
+        ? comparison.resultDefinition.resolutionSource
+        : null,
+      significanceThresholdPercentage: COMPARE_TWO_PERIODS_SIGNIFICANT_CHANGE_THRESHOLD,
+    },
+    reference: comparison.reference,
+    metrics: {
+      requested: comparison.requestedMetrics,
+      returned: buildComparedMetrics(comparison),
+    },
+  };
+
+  const resolvedResultsLabel =
+    comparison.resultDefinition.resolvedMode === 'specific_action'
+      ? comparison.resultDefinition.resolvedActionType
+      : 'all actions';
+  const includesResultMetrics = compareTwoPeriodsIncludesResultMetrics(comparison.requestedMetrics);
+  const metricLines = comparison.requestedMetrics.flatMap((metric) => {
+    const change = comparison.changes[metric];
+
+    if (!change) {
+      return [];
+    }
+
+    return [
+      `${compareTwoPeriodsMetricMetadata[metric].label}: ${formatMetricValue(metric, comparison.current[metric])} vs ${formatMetricValue(metric, comparison.previous[metric])}`,
+      `  Change: ${getMetricDirectionArrow(change.direction)} ${formatMetricAbsoluteChange(metric, change.absolute)} (${formatMetricPercentageChange(change.percentage)})`,
+      '',
+    ];
+  });
+
+  if (metricLines.length > 0 && metricLines[metricLines.length - 1] === '') {
+    metricLines.pop();
+  }
+
+  const textLines = [
+    'Comparison Between Two Periods',
+    '',
+    `Object: ${objectId}`,
+    `Level: ${level}`,
+    `Current Period: ${formatRequestedPeriod(currentPeriod)} (${comparison.current.dateRange || 'n/a'})`,
+    `Previous Period: ${formatRequestedPeriod(previousPeriod)} (${comparison.previous.dateRange || 'n/a'})`,
+    `Requested Metrics: ${comparison.requestedMetrics.join(', ')}`,
+    `Reference Used: ${comparison.reference.message}`,
+  ];
+
+  if (includesResultMetrics) {
+    textLines.push(
+      `Results Definition: ${resolvedResultsLabel}`,
+      `Resolved Mode: ${comparison.resultDefinition.resolvedMode}`,
+      `Resolved Action Type: ${comparison.resultDefinition.resolvedActionType || 'n/a'}`,
+      `Result Resolution Fallback: ${resultResolutionFallback ? `yes (${comparison.resultDefinition.resolutionSource})` : 'no'}`,
+      `Result Resolution: ${comparison.resultDefinition.message}`
+    );
+  }
+
+  textLines.push(
+    `Significance Threshold: ${COMPARE_TWO_PERIODS_SIGNIFICANT_CHANGE_THRESHOLD.toFixed(2)}%`,
+    ''
   );
 
-  const formatCurrency = (value: number): string => `$${(value / 100).toFixed(2)}`;
-  const formatSignedCurrency = (value: number): string => {
-    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-    return `${sign}${formatCurrency(Math.abs(value))}`;
-  };
-  const formatSignedNumber = (value: number): string => {
-    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-    const absolute = Math.abs(value);
-    return `${sign}${Number.isInteger(absolute) ? absolute : absolute.toFixed(2)}`;
-  };
-  const formatNumber = (value: number): string =>
-    Number.isInteger(value) ? value.toString() : value.toFixed(2);
-  const formatPercentage = (value: number): string => {
-    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-    return `${sign}${Math.abs(value).toFixed(2)}%`;
-  };
-  const getArrow = (direction: 'up' | 'down' | 'same'): string => {
-    if (direction === 'up') return '↑';
-    if (direction === 'down') return '↓';
-    return '→';
-  };
-
-  const summaryPoints: string[] = [];
-
-  if (comparison.changes.spend.significant) {
-    summaryPoints.push(
-      `Spend ${comparison.changes.spend.direction === 'up' ? 'increased' : 'decreased'} significantly (${formatPercentage(comparison.changes.spend.percentage)}).`
-    );
+  if (metricLines.length > 0) {
+    textLines.push(...metricLines);
   }
-
-  if (comparison.changes.results.significant) {
-    summaryPoints.push(
-      `Results ${comparison.changes.results.direction === 'up' ? 'improved' : 'declined'} significantly (${formatPercentage(comparison.changes.results.percentage)}).`
-    );
-  }
-
-  if (comparison.changes.cpr.significant) {
-    const cprTrend =
-      comparison.changes.cpr.direction === 'down'
-        ? 'improved'
-        : comparison.changes.cpr.direction === 'up'
-          ? 'worsened'
-          : 'stayed flat';
-
-    summaryPoints.push(`CPR ${cprTrend} (${formatPercentage(comparison.changes.cpr.percentage)}).`);
-  }
-
-  const executiveSummary =
-    summaryPoints.length > 0
-      ? summaryPoints.join(' ')
-      : 'No significant changes detected above the 10% threshold.';
 
   return {
+    structuredContent,
     content: [
       {
         type: 'text',
-        text:
-          `Comparison Between Two Periods\n\n` +
-          `Object: ${objectId}\n` +
-          `Level: ${level}\n` +
-          `Current Period: ${currentPeriod} (${comparison.current.dateRange || 'n/a'})\n` +
-          `Previous Period: ${previousPeriod} (${comparison.previous.dateRange || 'n/a'})\n` +
-          `Reference Used: ${comparison.reference.message}\n\n` +
-          `Executive Summary:\n${executiveSummary}\n\n` +
-          `Spend: ${formatCurrency(comparison.current.spend)} vs ${formatCurrency(comparison.previous.spend)}\n` +
-          `  ${getArrow(comparison.changes.spend.direction)} ${formatSignedCurrency(comparison.changes.spend.absolute)} (${formatPercentage(comparison.changes.spend.percentage)})${comparison.changes.spend.significant ? ' | Significant' : ''}\n\n` +
-          `Results: ${formatNumber(comparison.current.results)} vs ${formatNumber(comparison.previous.results)}\n` +
-          `  ${getArrow(comparison.changes.results.direction)} ${formatSignedNumber(comparison.changes.results.absolute)} (${formatPercentage(comparison.changes.results.percentage)})${comparison.changes.results.significant ? ' | Significant' : ''}\n\n` +
-          `CPR: ${formatCurrency(comparison.current.cpr)} vs ${formatCurrency(comparison.previous.cpr)}\n` +
-          `  ${getArrow(comparison.changes.cpr.direction)} ${formatSignedCurrency(comparison.changes.cpr.absolute)} (${formatPercentage(comparison.changes.cpr.percentage)})${comparison.changes.cpr.significant ? ' | Significant' : ''}`,
+        text: textLines.join('\n'),
       },
     ],
   };

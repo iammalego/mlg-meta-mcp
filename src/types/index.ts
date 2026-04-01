@@ -15,6 +15,7 @@ export interface MetaCampaign {
   name: string;
   status: string;
   objective: string;
+  accountId?: string;
   dailyBudget?: number;
   lifetimeBudget?: number;
   createdTime: string;
@@ -53,7 +54,9 @@ export interface MetaAd {
 export interface MetaInsights {
   campaignId?: string;
   campaignName?: string;
+  adsetId?: string;
   adsetName?: string;
+  adId?: string;
   adName?: string;
   spend: number;
   impressions: number;

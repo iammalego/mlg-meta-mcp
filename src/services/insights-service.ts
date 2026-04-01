@@ -2,13 +2,17 @@
  * Insights Service
  *
  * Lógica de negocio para métricas y reportes.
- * Procesa datos de Insights API y los formatea para presentación.
+ * Normaliza datos de Insights API para MCP sin descartar señal útil.
  */
 
 import { GraphClient } from '../api/graph-client.js';
 import { InsightsClient } from '../api/insights-client.js';
 import type { AccountService } from './account-service.js';
 import type { MetaAdSet, MetaCampaign, MetaInsights } from '../types/index.js';
+import {
+  normalizeCompareTwoPeriodsMetrics,
+  type CompareTwoPeriodsMetric,
+} from '../utils/compare-two-periods.js';
 import { getLogger } from '../utils/logger.js';
 
 const logger = getLogger();
@@ -28,6 +32,74 @@ export interface FormattedMetrics {
   impressions: number;
   clicks: number;
   ctr: number;
+  dateRange: string;
+}
+
+export interface FlexiblePeriodInput {
+  datePreset?: string;
+  timeRange?: { since: string; until: string };
+}
+
+export type ComparisonResultMode = 'primary_from_insights' | 'specific_action' | 'all_actions';
+
+export interface CompareTwoPeriodsOptions {
+  currentPeriod: FlexiblePeriodInput;
+  previousPeriod: FlexiblePeriodInput;
+  resultMode?: ComparisonResultMode;
+  resultActionType?: string;
+  metrics?: CompareTwoPeriodsMetric[];
+}
+
+interface ResolvedCompareTwoPeriodsOptions {
+  currentPeriod: FlexiblePeriodInput;
+  previousPeriod: FlexiblePeriodInput;
+  resultMode: ComparisonResultMode;
+  resultActionType: string;
+  metrics: CompareTwoPeriodsMetric[];
+}
+
+export interface ResolvedResultDefinition {
+  requestedMode: ComparisonResultMode;
+  requestedActionType: string | null;
+  resolvedMode: 'specific_action' | 'all_actions';
+  resolvedActionType: string | null;
+  resolutionSource:
+    | 'requested_specific_action'
+    | 'current_primary_action'
+    | 'previous_primary_action'
+    | 'all_actions_requested'
+    | 'all_actions_fallback';
+  message: string;
+}
+
+export interface ItemizedInsight {
+  level: 'campaign' | 'adset' | 'ad';
+  id: string;
+  name: string;
+  campaignId?: string;
+  campaignName?: string;
+  adsetId?: string;
+  adsetName?: string;
+  adId?: string;
+  adName?: string;
+  spend: number;
+  results: number;
+  cpr: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpm?: number;
+  cpp?: number;
+  actions?: Array<{
+    actionType: string;
+    value: string;
+  }>;
+  costPerActionType?: Array<{
+    actionType: string;
+    value: string;
+  }>;
+  dateStart: string;
+  dateStop: string;
   dateRange: string;
 }
 
@@ -53,8 +125,10 @@ export interface MetricChange {
 }
 
 export interface PeriodComparison {
+  requestedMetrics: CompareTwoPeriodsMetric[];
   current: FormattedMetrics;
   previous: FormattedMetrics;
+  resultDefinition: ResolvedResultDefinition;
   reference: {
     basis:
       | 'same_object'
@@ -68,14 +142,10 @@ export interface PeriodComparison {
       name: string;
     };
   };
-  changes: {
-    spend: MetricChange;
-    results: MetricChange;
-    cpr: MetricChange;
-  };
+  changes: Partial<Record<CompareTwoPeriodsMetric, MetricChange>>;
 }
 
-const SIGNIFICANT_CHANGE_THRESHOLD = 10;
+export const COMPARE_TWO_PERIODS_SIGNIFICANT_CHANGE_THRESHOLD = 10;
 
 export class InsightsService {
   private client: InsightsClient;
@@ -135,10 +205,13 @@ export class InsightsService {
     level: 'account' | 'campaign' | 'adset' | 'ad',
     datePreset?: string,
     timeRange?: { since: string; until: string }
-  ): Promise<MetaInsights[]> {
+  ): Promise<ItemizedInsight[]> {
     const resolvedId = await this.resolveObjectId(objectId);
     logger.info({ resolvedId, level, datePreset }, 'Fetching itemized insights');
-    return this.client.getInsights(resolvedId, level, datePreset, timeRange);
+
+    const insights = await this.client.getInsights(resolvedId, level, datePreset, timeRange);
+
+    return insights.map((insight, index) => this.formatItemizedInsight(level, insight, index));
   }
 
   /**
@@ -152,62 +225,103 @@ export class InsightsService {
   async compareTwoPeriods(
     objectIdOrName: string,
     level: 'account' | 'campaign' | 'adset' | 'ad',
-    currentPeriod: string,
-    previousPeriod: string
+    options: CompareTwoPeriodsOptions
   ): Promise<PeriodComparison> {
     const objectId = await this.resolveObjectId(objectIdOrName);
+    const resolvedOptions = this.normalizeCompareTwoPeriodsOptions(options);
 
-    logger.info({ objectId, currentPeriod, previousPeriod }, 'Comparing periods');
+    logger.info(
+      {
+        objectId,
+        level,
+        currentPeriod: resolvedOptions.currentPeriod,
+        previousPeriod: resolvedOptions.previousPeriod,
+        resultMode: resolvedOptions.resultMode,
+        resultActionType: resolvedOptions.resultActionType,
+        metrics: resolvedOptions.metrics,
+      },
+      'Comparing periods'
+    );
 
     // Non-campaign objects are compared directly against the same object in the previous period.
     if (level !== 'campaign') {
       const [currentInsights, previousInsights] = await Promise.all([
-        this.client.getInsights(objectId, level, currentPeriod),
-        this.client.getInsights(objectId, level, previousPeriod),
+        this.getInsightsForPeriod(objectId, level, resolvedOptions.currentPeriod),
+        this.getInsightsForPeriod(objectId, level, resolvedOptions.previousPeriod),
       ]);
 
+      const resultDefinition = this.resolveComparisonResultDefinition(
+        currentInsights,
+        previousInsights,
+        resolvedOptions
+      );
+
       return this.buildPeriodComparison(
-        this.formatInsights(currentInsights),
-        this.formatInsights(previousInsights),
+        this.formatInsights(currentInsights, resultDefinition),
+        this.formatInsights(previousInsights, resultDefinition),
         {
           basis: 'same_object',
           message: 'Compared the same object across both periods.',
-        }
+        },
+        resultDefinition,
+        resolvedOptions.metrics
       );
     }
 
     // Campaign comparisons need metadata plus current and previous performance.
     const [currentCampaign, currentInsights, previousInsights] = await Promise.all([
       this.graphClient.getCampaign(objectId),
-      this.client.getInsights(objectId, level, currentPeriod),
-      this.client.getInsights(objectId, level, previousPeriod),
+      this.getInsightsForPeriod(objectId, level, resolvedOptions.currentPeriod),
+      this.getInsightsForPeriod(objectId, level, resolvedOptions.previousPeriod),
     ]);
-
-    const current = this.formatInsights(currentInsights);
 
     // Prefer the exact same campaign when it has historical data.
     if (previousInsights.length > 0) {
-      return this.buildPeriodComparison(current, this.formatInsights(previousInsights), {
-        basis: 'same_campaign',
-        message: 'Compared against the same campaign in the previous period.',
-      });
+      const resultDefinition = this.resolveComparisonResultDefinition(
+        currentInsights,
+        previousInsights,
+        resolvedOptions
+      );
+
+      return this.buildPeriodComparison(
+        this.formatInsights(currentInsights, resultDefinition),
+        this.formatInsights(previousInsights, resultDefinition),
+        {
+          basis: 'same_campaign',
+          message: 'Compared against the same campaign in the previous period.',
+        },
+        resultDefinition,
+        resolvedOptions.metrics
+      );
     }
 
     const accountId = this.normalizeAccountId(currentCampaign.accountId);
 
     // The fallback chain depends on the parent account to inspect peer campaigns.
     if (!accountId) {
-      return this.buildPeriodComparison(current, this.emptyMetrics(), {
-        basis: 'no_reference',
-        message:
-          'The campaign had no data in the previous period and its account could not be resolved for fallbacks.',
-      });
+      const resultDefinition = this.resolveComparisonResultDefinition(
+        currentInsights,
+        [],
+        resolvedOptions
+      );
+
+      return this.buildPeriodComparison(
+        this.formatInsights(currentInsights, resultDefinition),
+        this.emptyMetrics(),
+        {
+          basis: 'no_reference',
+          message:
+            'The campaign had no data in the previous period and its account could not be resolved for fallbacks.',
+        },
+        resultDefinition,
+        resolvedOptions.metrics
+      );
     }
 
     // Widen the search to the account so the service can evaluate similar campaigns
     // and, if necessary, a campaign-level account average.
     const [previousAccountCampaignInsights, accountCampaigns, accountAdSets] = await Promise.all([
-      this.client.getInsights(accountId, 'campaign', previousPeriod),
+      this.getInsightsForPeriod(accountId, 'campaign', resolvedOptions.previousPeriod),
       this.graphClient.getCampaigns(accountId, 'ALL'),
       this.graphClient.getAdSets(accountId, 'ALL'),
     ]);
@@ -221,35 +335,68 @@ export class InsightsService {
     );
 
     if (similarCampaign) {
-      return this.buildPeriodComparison(current, this.formatInsights([similarCampaign.insight]), {
-        basis: 'similar_campaign',
-        message: `This campaign had no data in the previous period, so the comparison uses the most similar campaign: ${similarCampaign.campaign.name}.`,
-        referenceCampaign: {
-          id: similarCampaign.campaign.id,
-          name: similarCampaign.campaign.name,
+      const referenceInsights = [similarCampaign.insight];
+      const resultDefinition = this.resolveComparisonResultDefinition(
+        currentInsights,
+        referenceInsights,
+        resolvedOptions
+      );
+
+      return this.buildPeriodComparison(
+        this.formatInsights(currentInsights, resultDefinition),
+        this.formatInsights(referenceInsights, resultDefinition),
+        {
+          basis: 'similar_campaign',
+          message: `This campaign had no data in the previous period, so the comparison uses the most similar campaign: ${similarCampaign.campaign.name}.`,
+          referenceCampaign: {
+            id: similarCampaign.campaign.id,
+            name: similarCampaign.campaign.name,
+          },
         },
-      });
+        resultDefinition,
+        resolvedOptions.metrics
+      );
     }
 
     // Second fallback: use the account campaign average for the baseline period.
     if (previousAccountCampaignInsights.length > 0) {
+      const resultDefinition = this.resolveComparisonResultDefinition(
+        currentInsights,
+        previousAccountCampaignInsights,
+        resolvedOptions
+      );
+
       return this.buildPeriodComparison(
-        current,
-        this.buildCampaignAverageMetrics(previousAccountCampaignInsights),
+        this.formatInsights(currentInsights, resultDefinition),
+        this.buildCampaignAverageMetrics(previousAccountCampaignInsights, resultDefinition),
         {
           basis: 'account_average',
           message:
             'This campaign had no data in the previous period and no similar campaign was found, so the comparison uses the account campaign average.',
-        }
+        },
+        resultDefinition,
+        resolvedOptions.metrics
       );
     }
 
     // Last resort: there is no usable historical reference.
-    return this.buildPeriodComparison(current, this.emptyMetrics(), {
-      basis: 'no_reference',
-      message:
-        'No campaign data was available in the previous period, so the comparison falls back to a zero baseline.',
-    });
+    const resultDefinition = this.resolveComparisonResultDefinition(
+      currentInsights,
+      [],
+      resolvedOptions
+    );
+
+    return this.buildPeriodComparison(
+      this.formatInsights(currentInsights, resultDefinition),
+      this.emptyMetrics(),
+      {
+        basis: 'no_reference',
+        message:
+          'No campaign data was available in the previous period, so the comparison falls back to a zero baseline.',
+      },
+      resultDefinition,
+      resolvedOptions.metrics
+    );
   }
 
   /**
@@ -292,7 +439,10 @@ export class InsightsService {
   /**
    * Format raw insights into readable metrics
    */
-  private formatInsights(insights: MetaInsights[]): FormattedMetrics {
+  private formatInsights(
+    insights: MetaInsights[],
+    resultDefinition?: ResolvedResultDefinition
+  ): FormattedMetrics {
     if (insights.length === 0) {
       return this.emptyMetrics();
     }
@@ -316,7 +466,7 @@ export class InsightsService {
 
     // Calculate results (sum of all actions)
     const results = insights.reduce((sum, insight) => {
-      return sum + this.calculateResults(insight);
+      return sum + this.calculateResults(insight, resultDefinition);
     }, 0);
 
     // Calculate CPR (Cost Per Result)
@@ -337,6 +487,84 @@ export class InsightsService {
       clicks: aggregated.clicks,
       ctr: Math.round(aggregated.ctr * 100) / 100, // Round to 2 decimals
       dateRange,
+    };
+  }
+
+  private formatItemizedInsight(
+    level: 'account' | 'campaign' | 'adset' | 'ad',
+    insight: MetaInsights,
+    index: number
+  ): ItemizedInsight {
+    const results = this.calculateResults(insight);
+    const cpr = results > 0 ? insight.spend / results : 0;
+    const dateRange =
+      insight.dateStart && insight.dateStop ? `${insight.dateStart} → ${insight.dateStop}` : '';
+
+    const normalized = this.normalizeInsightIdentity(level, insight, index);
+
+    return {
+      level: normalized.level,
+      id: normalized.id,
+      name: normalized.name,
+      campaignId: insight.campaignId,
+      campaignName: insight.campaignName,
+      adsetId: insight.adsetId,
+      adsetName: insight.adsetName,
+      adId: insight.adId,
+      adName: insight.adName,
+      spend: insight.spend,
+      results,
+      cpr,
+      impressions: insight.impressions,
+      clicks: insight.clicks,
+      ctr: insight.ctr,
+      cpm: insight.cpm,
+      cpp: insight.cpp,
+      actions: insight.actions,
+      costPerActionType: insight.costPerActionType,
+      dateStart: insight.dateStart,
+      dateStop: insight.dateStop,
+      dateRange,
+    };
+  }
+
+  private normalizeInsightIdentity(
+    level: 'account' | 'campaign' | 'adset' | 'ad',
+    insight: MetaInsights,
+    index: number
+  ): Pick<ItemizedInsight, 'level' | 'id' | 'name'> {
+    if (level === 'campaign') {
+      const id = insight.campaignId || `campaign_${index + 1}`;
+      return {
+        level,
+        id,
+        name: insight.campaignName || id,
+      };
+    }
+
+    if (level === 'adset') {
+      const id = insight.adsetId || insight.adsetName || `adset_${index + 1}`;
+      return {
+        level,
+        id,
+        name: insight.adsetName || id,
+      };
+    }
+
+    if (level === 'ad') {
+      const id = insight.adId || insight.adName || `ad_${index + 1}`;
+      return {
+        level,
+        id,
+        name: insight.adName || id,
+      };
+    }
+
+    const id = insight.campaignId || `account_${index + 1}`;
+    return {
+      level: 'campaign',
+      id,
+      name: insight.campaignName || id,
     };
   }
 
@@ -361,12 +589,16 @@ export class InsightsService {
    *
    * Falls back to summing all actions when no primary conversion type is available.
    */
-  private calculateResults(insight: MetaInsights): number {
+  private calculateResults(
+    insight: MetaInsights,
+    resultDefinition?: ResolvedResultDefinition
+  ): number {
     if (!insight.actions || insight.actions.length === 0) {
       return 0;
     }
 
-    const primaryActionType = insight.costPerActionType?.[0]?.actionType;
+    const primaryActionType =
+      resultDefinition?.resolvedActionType ?? insight.costPerActionType?.[0]?.actionType;
 
     if (primaryActionType) {
       return insight.actions
@@ -380,17 +612,23 @@ export class InsightsService {
   private buildPeriodComparison(
     current: FormattedMetrics,
     previous: FormattedMetrics,
-    reference: PeriodComparison['reference']
+    reference: PeriodComparison['reference'],
+    resultDefinition: ResolvedResultDefinition,
+    requestedMetrics: CompareTwoPeriodsMetric[]
   ): PeriodComparison {
     return {
+      requestedMetrics,
       current,
       previous,
+      resultDefinition,
       reference,
-      changes: {
-        spend: this.buildMetricChange(current.spend, previous.spend),
-        results: this.buildMetricChange(current.results, previous.results),
-        cpr: this.buildMetricChange(current.cpr, previous.cpr),
-      },
+      changes: requestedMetrics.reduce<Partial<Record<CompareTwoPeriodsMetric, MetricChange>>>(
+        (acc, metric) => {
+          acc[metric] = this.buildMetricChange(current[metric], previous[metric]);
+          return acc;
+        },
+        {}
+      ),
     };
   }
 
@@ -405,6 +643,102 @@ export class InsightsService {
       logger.debug({ objectIdOrName }, 'Not an account name, using as ID');
       return objectIdOrName;
     }
+  }
+
+  private normalizeCompareTwoPeriodsOptions(
+    options: CompareTwoPeriodsOptions
+  ): ResolvedCompareTwoPeriodsOptions {
+    return {
+      currentPeriod: options.currentPeriod,
+      previousPeriod: options.previousPeriod,
+      resultMode: options.resultMode ?? 'primary_from_insights',
+      resultActionType: options.resultActionType ?? '',
+      metrics: normalizeCompareTwoPeriodsMetrics(options.metrics),
+    };
+  }
+
+  private getInsightsForPeriod(
+    objectId: string,
+    level: 'account' | 'campaign' | 'adset' | 'ad',
+    period: FlexiblePeriodInput
+  ): Promise<MetaInsights[]> {
+    return this.client.getInsights(objectId, level, period.datePreset, period.timeRange);
+  }
+
+  private resolveComparisonResultDefinition(
+    currentInsights: MetaInsights[],
+    previousInsights: MetaInsights[],
+    options: ResolvedCompareTwoPeriodsOptions
+  ): ResolvedResultDefinition {
+    if (options.resultMode === 'specific_action') {
+      return {
+        requestedMode: options.resultMode,
+        requestedActionType: options.resultActionType,
+        resolvedMode: 'specific_action',
+        resolvedActionType: options.resultActionType,
+        resolutionSource: 'requested_specific_action',
+        message: `Results use the explicit action type "${options.resultActionType}" across both periods.`,
+      };
+    }
+
+    if (options.resultMode === 'all_actions') {
+      return {
+        requestedMode: options.resultMode,
+        requestedActionType: null,
+        resolvedMode: 'all_actions',
+        resolvedActionType: null,
+        resolutionSource: 'all_actions_requested',
+        message: 'Results sum all action types across both periods.',
+      };
+    }
+
+    const currentPrimaryActionType = this.getPrimaryActionType(currentInsights);
+
+    if (currentPrimaryActionType) {
+      return {
+        requestedMode: options.resultMode,
+        requestedActionType: null,
+        resolvedMode: 'specific_action',
+        resolvedActionType: currentPrimaryActionType,
+        resolutionSource: 'current_primary_action',
+        message: `Results use the current period primary action type "${currentPrimaryActionType}" across both periods.`,
+      };
+    }
+
+    const previousPrimaryActionType = this.getPrimaryActionType(previousInsights);
+
+    if (previousPrimaryActionType) {
+      return {
+        requestedMode: options.resultMode,
+        requestedActionType: null,
+        resolvedMode: 'specific_action',
+        resolvedActionType: previousPrimaryActionType,
+        resolutionSource: 'previous_primary_action',
+        message: `Results use the previous/reference period primary action type "${previousPrimaryActionType}" across both periods.`,
+      };
+    }
+
+    return {
+      requestedMode: options.resultMode,
+      requestedActionType: null,
+      resolvedMode: 'all_actions',
+      resolvedActionType: null,
+      resolutionSource: 'all_actions_fallback',
+      message:
+        'No explicit primary action type was available in the insights, so results sum all action types across both periods.',
+    };
+  }
+
+  private getPrimaryActionType(insights: MetaInsights[]): string | null {
+    for (const insight of insights) {
+      const primaryActionType = insight.costPerActionType?.[0]?.actionType;
+
+      if (primaryActionType) {
+        return primaryActionType;
+      }
+    }
+
+    return null;
   }
 
   private normalizeAccountId(accountId?: string): string | undefined {
@@ -633,7 +967,10 @@ export class InsightsService {
     return dominantValue;
   }
 
-  private buildCampaignAverageMetrics(insights: MetaInsights[]): FormattedMetrics {
+  private buildCampaignAverageMetrics(
+    insights: MetaInsights[],
+    resultDefinition?: ResolvedResultDefinition
+  ): FormattedMetrics {
     if (insights.length === 0) {
       return this.emptyMetrics();
     }
@@ -641,7 +978,7 @@ export class InsightsService {
     const count = insights.length;
     const totals = insights.reduce(
       (acc, insight) => {
-        const results = this.calculateResults(insight);
+        const results = this.calculateResults(insight, resultDefinition);
         // Average CPR is computed per-campaign first, then averaged, so the fallback
         // behaves like a benchmark campaign instead of a fully aggregated account total.
         const cpr = results > 0 ? insight.spend / results : 0;
@@ -684,7 +1021,7 @@ export class InsightsService {
       absolute,
       percentage: Math.round(percentage * 100) / 100,
       direction,
-      significant: Math.abs(percentage) >= SIGNIFICANT_CHANGE_THRESHOLD,
+      significant: Math.abs(percentage) >= COMPARE_TWO_PERIODS_SIGNIFICANT_CHANGE_THRESHOLD,
     };
   }
 }

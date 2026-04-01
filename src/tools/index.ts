@@ -8,6 +8,10 @@
 
 import { z } from 'zod';
 import type { ToolDefinition } from '../types/index.js';
+import {
+  compareTwoPeriodsSupportedMetrics,
+  defaultCompareTwoPeriodsMetrics,
+} from '../utils/compare-two-periods.js';
 import { ErrorCategory, MetaMcpError } from '../utils/errors.js';
 
 const campaignStatusSchema = z.enum(['ACTIVE', 'PAUSED']);
@@ -32,6 +36,119 @@ const timeRangeSchema = z.object({
   since: z.string().describe('Start date (YYYY-MM-DD)'),
   until: z.string().describe('End date (YYYY-MM-DD)'),
 });
+
+const flexiblePeriodSchema = z
+  .object({
+    datePreset: datePresetSchema
+      .optional()
+      .describe('Predefined date range. Use instead of timeRange.'),
+    timeRange: timeRangeSchema.optional().describe('Custom date range (alternative to datePreset)'),
+  })
+  .superRefine((value, ctx) => {
+    const hasDatePreset = Boolean(value.datePreset);
+    const hasTimeRange = Boolean(value.timeRange);
+
+    if (hasDatePreset === hasTimeRange) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide exactly one of datePreset or timeRange.',
+      });
+    }
+  });
+
+const comparePeriodSchema = z.preprocess(
+  (value) => (typeof value === 'string' ? { datePreset: value } : value),
+  flexiblePeriodSchema
+);
+
+const compareTwoPeriodsResultModeSchema = z.enum([
+  'primary_from_insights',
+  'specific_action',
+  'all_actions',
+]);
+const compareTwoPeriodsMetricSchema = z.enum(compareTwoPeriodsSupportedMetrics);
+const compareTwoPeriodsMetricsSchema = z.preprocess(
+  (value) => {
+    if (typeof value === 'string') {
+      return [value];
+    }
+
+    return value;
+  },
+  z
+    .array(compareTwoPeriodsMetricSchema)
+    .nonempty('metrics must include at least one metric when provided.')
+    .transform((metrics) => [...new Set(metrics)])
+    .optional()
+    .default([...defaultCompareTwoPeriodsMetrics])
+    .describe(
+      'Metrics to compare. Supports spend, results, cpr, impressions, clicks, ctr. Omit to use the backward-compatible default: spend, results, cpr. Single strings are accepted and normalized into an array.'
+    )
+);
+
+const compareTwoPeriodsSchema = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+
+    const input = value as Record<string, unknown>;
+
+    if (typeof input.resultActionType === 'string' && input.resultMode === undefined) {
+      return {
+        ...input,
+        resultMode: 'specific_action',
+      };
+    }
+
+    return value;
+  },
+  z
+    .object({
+      objectId: z
+        .string()
+        .describe(
+          'ID of account (act_XXX), campaign, adset, or ad. Account name is also supported.'
+        ),
+      level: insightsLevelSchema.describe('Aggregation level for the comparison'),
+      currentPeriod: comparePeriodSchema.describe(
+        'Current period selector. Pass either { datePreset } or { timeRange: { since, until } }. Legacy preset strings are still accepted and normalized.'
+      ),
+      previousPeriod: comparePeriodSchema.describe(
+        'Previous period selector. Pass either { datePreset } or { timeRange: { since, until } }. Legacy preset strings are still accepted and normalized.'
+      ),
+      resultMode: compareTwoPeriodsResultModeSchema
+        .optional()
+        .default('primary_from_insights')
+        .describe('How to define results for the comparison. Default: primary_from_insights.'),
+      resultActionType: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe(
+          'Specific Meta action_type to compare (for example: lead or purchase). If provided without resultMode, specific_action is inferred.'
+        ),
+      metrics: compareTwoPeriodsMetricsSchema,
+    })
+    .superRefine((value, ctx) => {
+      if (value.resultMode === 'specific_action' && !value.resultActionType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['resultActionType'],
+          message: 'resultActionType is required when resultMode is specific_action.',
+        });
+      }
+
+      if (value.resultMode !== 'specific_action' && value.resultActionType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['resultActionType'],
+          message: 'resultActionType is only allowed when resultMode is specific_action.',
+        });
+      }
+    })
+);
 
 const targetingSchema = z
   .record(z.unknown())
@@ -184,7 +301,7 @@ const toolRegistry = {
   // Insights Tools
   getInsights: {
     description:
-      'Get performance metrics for accounts, campaigns, adsets, or ads. Supports date presets (yesterday, last_7d, etc) or custom date ranges. Level determines aggregation: account, campaign, adset, or ad.',
+      'Get performance metrics for accounts, campaigns, adsets, or ads. Supports date presets (yesterday, last_7d, etc) or custom date ranges. Account level returns an aggregated summary; campaign/adset/ad levels also return structured per-item metrics with normalized ids/names plus spend, results, and CPR so consumers can filter and interpret the full signal.',
     schema: z.object({
       objectId: z.string().describe('ID of account (act_XXX), campaign, adset, or ad'),
       level: insightsLevelSchema.describe('Aggregation level for metrics'),
@@ -198,17 +315,8 @@ const toolRegistry = {
   },
   compareTwoPeriods: {
     description:
-      'Compare performance metrics between two periods for an account, campaign, adset, or ad. For campaigns, it explains whether the reference is the same campaign, a similar campaign, or the account campaign average. Highlights percentage changes, direction, and significant shifts above 10%.',
-    schema: z.object({
-      objectId: z
-        .string()
-        .describe(
-          'ID of account (act_XXX), campaign, adset, or ad. Account name is also supported.'
-        ),
-      level: insightsLevelSchema.describe('Aggregation level for the comparison'),
-      currentPeriod: datePresetSchema.describe('Current period preset'),
-      previousPeriod: datePresetSchema.describe('Previous period preset'),
-    }),
+      'Compare performance metrics between two explicit periods for an account, campaign, adset, or ad. Each side accepts either a preset or a custom timeRange. Result selection can follow the primary action inferred from insights, a specific Meta action_type, or all actions. Optional metrics let callers compare spend, results, cpr, impressions, clicks, and/or ctr; omitting metrics keeps the backward-compatible spend/results/cpr default. For campaigns, the response also explains whether the baseline came from the same campaign, a similar campaign, or the account campaign average.',
+    schema: compareTwoPeriodsSchema,
   },
   // Productivity Tools (v0.3.0)
   cloneCampaign: {

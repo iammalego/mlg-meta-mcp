@@ -102,6 +102,13 @@ If you modify a tool schema or handler output:
 3. Update `README.md` and `docs/api.md` when public behavior changes
 4. Note the user-facing impact in the PR description
 
+For core MCP tools, preserve maximal useful signal in the base contract:
+
+- consumers/LLMs/apps own filtering and interpretation
+- ergonomic formatting is encouraged
+- destructive filtering for one project-specific workflow is not
+- if a business-specific opinion is needed, add it as higher-level workflow logic instead of shrinking the core contract
+
 ### Coding conventions
 
 - TypeScript in strict mode

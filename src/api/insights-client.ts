@@ -12,7 +12,9 @@ interface InsightsResponse {
   data: Array<{
     campaign_id?: string;
     campaign_name?: string;
+    adset_id?: string;
     adset_name?: string;
+    ad_id?: string;
     ad_name?: string;
     impressions?: string;
     clicks?: string;
@@ -61,7 +63,9 @@ export class InsightsClient extends MetaApiClient {
     const fields = [
       'campaign_id',
       'campaign_name',
+      'adset_id',
       'adset_name',
+      'ad_id',
       'ad_name',
       'impressions',
       'clicks',
@@ -121,7 +125,9 @@ export class InsightsClient extends MetaApiClient {
       return {
         campaignId: insight.campaign_id,
         campaignName: insight.campaign_name,
+        adsetId: insight.adset_id,
         adsetName: insight.adset_name,
+        adId: insight.ad_id,
         adName: insight.ad_name,
         spend: insight.spend ? parseFloat(insight.spend) : 0,
         // Meta returns integer strings for impressions and clicks, but Math.round guards
