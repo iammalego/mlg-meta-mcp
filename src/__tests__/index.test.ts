@@ -26,8 +26,10 @@ describe('Tool Registry', () => {
     const cloneCampaign = tools.find((t) => t.name === 'cloneCampaign');
     const cloneAdSet = tools.find((t) => t.name === 'cloneAdSet');
 
-    const cloneCampaignProps = (cloneCampaign?.inputSchema as { properties?: Record<string, unknown> })?.properties ?? {};
-    const cloneAdSetProps = (cloneAdSet?.inputSchema as { properties?: Record<string, unknown> })?.properties ?? {};
+    const cloneCampaignProps =
+      (cloneCampaign?.inputSchema as { properties?: Record<string, unknown> })?.properties ?? {};
+    const cloneAdSetProps =
+      (cloneAdSet?.inputSchema as { properties?: Record<string, unknown> })?.properties ?? {};
 
     expect(cloneCampaignProps).not.toHaveProperty('copyAds');
     expect(cloneAdSetProps).not.toHaveProperty('copyAds');

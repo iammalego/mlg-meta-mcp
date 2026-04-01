@@ -100,7 +100,6 @@ interface AdsResponse {
   };
 }
 
-
 export class GraphClient extends MetaApiClient {
   // ==================== CAMPAIGN OPERATIONS ====================
 
