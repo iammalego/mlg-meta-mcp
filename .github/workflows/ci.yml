@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   quality:
+    name: Quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -42,9 +43,14 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      - name: Build
+        run: npm run build
+
   test:
+    name: Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: quality
     strategy:
       fail-fast: false
       matrix:
@@ -64,4 +70,4 @@ jobs:
         run: npm ci
 
       - name: Test
-        run: npm test
+        run: npm test -- --run
