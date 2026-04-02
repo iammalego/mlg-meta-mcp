@@ -1373,4 +1373,3 @@ async function handleGetAdCreatives(
     ],
   };
 }
-

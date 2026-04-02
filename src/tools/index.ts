@@ -359,13 +359,15 @@ const toolRegistry = {
 
   // ==================== GROUP 1: Detail Getters ====================
   getAccountInfo: {
-    description: 'Get detailed information about an ad account including currency, timezone, status, and linked business.',
+    description:
+      'Get detailed information about an ad account including currency, timezone, status, and linked business.',
     schema: z.object({
       accountId: z.string().describe('Ad account ID (act_XXX)'),
     }),
   },
   getCampaignDetails: {
-    description: 'Get extended campaign details including bid strategy, buying type, special ad categories, and issues.',
+    description:
+      'Get extended campaign details including bid strategy, buying type, special ad categories, and issues.',
     schema: z.object({
       campaignId: z.string().describe('Campaign ID'),
     }),
@@ -397,7 +399,9 @@ const toolRegistry = {
     schema: z.object({
       campaignId: z.string().describe('Campaign ID to create the budget schedule for'),
       budgetValue: z.number().describe('Budget value (absolute amount or multiplier)'),
-      budgetValueType: z.enum(['ABSOLUTE', 'MULTIPLIER']).describe('Whether the budget value is an absolute amount or a multiplier'),
+      budgetValueType: z
+        .enum(['ABSOLUTE', 'MULTIPLIER'])
+        .describe('Whether the budget value is an absolute amount or a multiplier'),
       timeStart: z.number().describe('Schedule start time as a unix timestamp'),
       timeEnd: z.number().describe('Schedule end time as a unix timestamp'),
     }),
@@ -408,7 +412,11 @@ const toolRegistry = {
     description: 'Search for Facebook interest targeting options by keyword.',
     schema: z.object({
       query: z.string().describe('Search keyword for interests'),
-      limit: z.number().optional().default(25).describe('Maximum number of results to return. Default: 25'),
+      limit: z
+        .number()
+        .optional()
+        .default(25)
+        .describe('Maximum number of results to return. Default: 25'),
     }),
   },
   getInterestSuggestions: {
@@ -422,11 +430,15 @@ const toolRegistry = {
     }),
   },
   validateInterests: {
-    description: 'Validate a list of interests by name or Facebook ID. At least one of interestList or interestFbidList must be provided.',
+    description:
+      'Validate a list of interests by name or Facebook ID. At least one of interestList or interestFbidList must be provided.',
     schema: z
       .object({
         interestList: z.array(z.string()).optional().describe('Interest names to validate'),
-        interestFbidList: z.array(z.string()).optional().describe('Interest Facebook IDs to validate'),
+        interestFbidList: z
+          .array(z.string())
+          .optional()
+          .describe('Interest Facebook IDs to validate'),
       })
       .superRefine((value, ctx) => {
         if (!value.interestList?.length && !value.interestFbidList?.length) {
@@ -447,13 +459,22 @@ const toolRegistry = {
     description: 'Search for Facebook demographic targeting categories by class.',
     schema: z.object({
       demographicClass: z
-        .enum(['demographics', 'life_events', 'industries', 'income', 'family_statuses', 'user_device', 'user_os'])
+        .enum([
+          'demographics',
+          'life_events',
+          'industries',
+          'income',
+          'family_statuses',
+          'user_device',
+          'user_os',
+        ])
         .describe('Demographic class to search'),
       limit: z.number().optional().default(50).describe('Maximum number of results. Default: 50'),
     }),
   },
   searchGeoLocations: {
-    description: 'Search for geographic locations for targeting (countries, cities, regions, etc.).',
+    description:
+      'Search for geographic locations for targeting (countries, cities, regions, etc.).',
     schema: z.object({
       query: z.string().describe('Location name to search for'),
       locationTypes: z

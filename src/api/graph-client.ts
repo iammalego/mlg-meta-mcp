@@ -497,9 +497,7 @@ export class GraphClient extends MetaApiClient {
    *
    * Endpoint: GET /{account-id}
    */
-  async getAccountInfo(
-    accountId: string
-  ): Promise<{
+  async getAccountInfo(accountId: string): Promise<{
     id: string;
     name: string;
     currency: string;

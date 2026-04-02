@@ -650,7 +650,6 @@ describe('handleToolCall getAdDetails', () => {
 
 // ==================== GROUP 2: AD OPERATIONS ====================
 
-
 describe('handleToolCall updateAd', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -863,9 +862,7 @@ describe('handleToolCall searchGeoLocations', () => {
   });
 
   it('returns array of items with id and name', async () => {
-    mockTargetingClient.searchGeoLocations.mockResolvedValue([
-      { id: 'AR', name: 'Argentina' },
-    ]);
+    mockTargetingClient.searchGeoLocations.mockResolvedValue([{ id: 'AR', name: 'Argentina' }]);
 
     const result = await handleToolCall('searchGeoLocations', { query: 'Argentina' });
 
@@ -911,4 +908,3 @@ describe('handleToolCall getAdCreatives', () => {
     expect(result.isError).toBeFalsy();
   });
 });
-

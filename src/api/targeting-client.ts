@@ -35,10 +35,7 @@ export class TargetingClient extends MetaApiClient {
     return this.search({ type: 'adinterest', q: query, limit });
   }
 
-  async getInterestSuggestions(
-    interestList: string[],
-    limit = 25
-  ): Promise<MetaTargetingItem[]> {
+  async getInterestSuggestions(interestList: string[], limit = 25): Promise<MetaTargetingItem[]> {
     return this.search({
       type: 'adinterestsuggestion',
       interest_list: JSON.stringify(interestList),
