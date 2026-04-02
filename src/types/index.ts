@@ -77,6 +77,32 @@ export interface MetaInsights {
   dateStop: string;
 }
 
+export interface MetaAdDetail {
+  id: string;
+  name: string;
+  status: string;
+  effectiveStatus: string;
+  adSetId: string;
+  campaignId: string;
+  creativeId?: string;
+  issuesInfo?: Array<{ error_code: number; error_message: string; level: string }>;
+}
+
+export interface MetaCreative {
+  id: string;
+  name: string;
+  objectStorySpec?: Record<string, unknown>;
+  imageHash?: string;
+  callToAction?: { type: string };
+}
+
+export interface MetaTargetingItem {
+  id: string;
+  name: string;
+  audienceSize?: number;
+  path?: string[];
+}
+
 // MCP Tool Types
 export interface ToolDefinition {
   name: string;

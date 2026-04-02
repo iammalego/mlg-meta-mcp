@@ -25,13 +25,6 @@ const datePresetSchema = z.enum([
   'this_month',
   'last_month',
 ]);
-const adSetBidStrategySchema = z.enum([
-  'LOWEST_COST_WITHOUT_CAP',
-  'COST_CAP',
-  'LOWEST_COST_WITH_BID_CAP',
-]);
-const adSetBillingEventSchema = z.enum(['IMPRESSIONS', 'CLICKS', 'LINK_CLICKS', 'APP_INSTALLS']);
-
 const timeRangeSchema = z.object({
   since: z.string().describe('Start date (YYYY-MM-DD)'),
   until: z.string().describe('End date (YYYY-MM-DD)'),
@@ -150,10 +143,6 @@ const compareTwoPeriodsSchema = z.preprocess(
     })
 );
 
-const targetingSchema = z
-  .record(z.unknown())
-  .describe('Targeting configuration (geo_locations, age_min, age_max, etc)');
-
 const toolRegistry = {
   // Account Discovery Tools
   discoverAdAccounts: {
@@ -171,27 +160,6 @@ const toolRegistry = {
         .optional()
         .default('ALL')
         .describe('Filter campaigns by status. Default: ALL'),
-    }),
-  },
-  createCampaign: {
-    description:
-      'Create a new ad campaign in an account. Requires name, objective, and status. Optional: daily_budget or lifetime_budget (in cents).',
-    schema: z.object({
-      accountId: z.string().describe('Ad account ID (act_XXX) or account name'),
-      name: z.string().describe('Campaign name'),
-      objective: z
-        .enum([
-          'OUTCOME_SALES',
-          'OUTCOME_LEADS',
-          'OUTCOME_ENGAGEMENT',
-          'OUTCOME_AWARENESS',
-          'OUTCOME_TRAFFIC',
-          'OUTCOME_APP_PROMOTION',
-        ])
-        .describe('Campaign objective'),
-      status: campaignStatusSchema.optional().default('PAUSED').describe('Initial campaign status. Defaults to PAUSED.'),
-      dailyBudget: z.number().optional().describe('Daily budget in cents (e.g., 5000 = $50.00)'),
-      lifetimeBudget: z.number().optional().describe('Lifetime budget in cents'),
     }),
   },
   updateCampaign: {
@@ -237,24 +205,6 @@ const toolRegistry = {
       .refine((data) => Boolean(data.campaignId || data.accountId), {
         message: 'Either campaignId or accountId is required.',
       }),
-  },
-  createAdSet: {
-    description:
-      'Create a new ad set within a campaign. Requires targeting, budget, and billing configuration.',
-    schema: z.object({
-      campaignId: z.string().describe('Parent campaign ID'),
-      name: z.string().describe('Ad set name'),
-      dailyBudget: z.number().optional().describe('Daily budget in cents'),
-      lifetimeBudget: z.number().optional().describe('Lifetime budget in cents'),
-      targeting: targetingSchema.optional(),
-      bidStrategy: adSetBidStrategySchema.optional().describe('Bid strategy'),
-      billingEvent: adSetBillingEventSchema.optional().describe('Billing event'),
-      optimizationGoal: z
-        .string()
-        .optional()
-        .describe('Optimization goal (e.g., REACH, LINK_CLICKS, CONVERSIONS)'),
-      status: campaignStatusSchema.optional().default('PAUSED').describe('Initial status'),
-    }),
   },
   updateAdSet: {
     description: 'Update an existing ad set. Only provided fields will be updated.',
@@ -404,6 +354,121 @@ const toolRegistry = {
         .optional()
         .default('yesterday')
         .describe('Time period to analyze. Default: yesterday'),
+    }),
+  },
+
+  // ==================== GROUP 1: Detail Getters ====================
+  getAccountInfo: {
+    description: 'Get detailed information about an ad account including currency, timezone, status, and linked business.',
+    schema: z.object({
+      accountId: z.string().describe('Ad account ID (act_XXX)'),
+    }),
+  },
+  getCampaignDetails: {
+    description: 'Get extended campaign details including bid strategy, buying type, special ad categories, and issues.',
+    schema: z.object({
+      campaignId: z.string().describe('Campaign ID'),
+    }),
+  },
+  getAdSetDetails: {
+    description: 'Get extended ad set details including bid amount, effective status, and issues.',
+    schema: z.object({
+      adSetId: z.string().describe('Ad set ID'),
+    }),
+  },
+  getAdDetails: {
+    description: 'Get full ad details including effective status, creative ID, and issues.',
+    schema: z.object({
+      adId: z.string().describe('Ad ID'),
+    }),
+  },
+  updateAd: {
+    description: 'Update an existing ad status or bid amount.',
+    schema: z.object({
+      adId: z.string().describe('Ad ID'),
+      status: z.enum(['ACTIVE', 'PAUSED']).optional().describe('New status for the ad'),
+      bidAmount: z.number().optional().describe('New bid amount in cents'),
+    }),
+  },
+
+  // ==================== GROUP 3: Budget ====================
+  createBudgetSchedule: {
+    description: 'Create a budget schedule for a campaign with a specific time window.',
+    schema: z.object({
+      campaignId: z.string().describe('Campaign ID to create the budget schedule for'),
+      budgetValue: z.number().describe('Budget value (absolute amount or multiplier)'),
+      budgetValueType: z.enum(['ABSOLUTE', 'MULTIPLIER']).describe('Whether the budget value is an absolute amount or a multiplier'),
+      timeStart: z.number().describe('Schedule start time as a unix timestamp'),
+      timeEnd: z.number().describe('Schedule end time as a unix timestamp'),
+    }),
+  },
+
+  // ==================== GROUP 4: Targeting Research ====================
+  searchInterests: {
+    description: 'Search for Facebook interest targeting options by keyword.',
+    schema: z.object({
+      query: z.string().describe('Search keyword for interests'),
+      limit: z.number().optional().default(25).describe('Maximum number of results to return. Default: 25'),
+    }),
+  },
+  getInterestSuggestions: {
+    description: 'Get interest suggestions based on a list of seed interests.',
+    schema: z.object({
+      interestList: z
+        .array(z.string())
+        .min(1)
+        .describe('List of interest names to use as seeds for suggestions'),
+      limit: z.number().optional().default(25).describe('Maximum number of results. Default: 25'),
+    }),
+  },
+  validateInterests: {
+    description: 'Validate a list of interests by name or Facebook ID. At least one of interestList or interestFbidList must be provided.',
+    schema: z
+      .object({
+        interestList: z.array(z.string()).optional().describe('Interest names to validate'),
+        interestFbidList: z.array(z.string()).optional().describe('Interest Facebook IDs to validate'),
+      })
+      .superRefine((value, ctx) => {
+        if (!value.interestList?.length && !value.interestFbidList?.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'At least one of interestList or interestFbidList must be provided.',
+          });
+        }
+      }),
+  },
+  searchBehaviors: {
+    description: 'Search for Facebook behavior targeting categories.',
+    schema: z.object({
+      limit: z.number().optional().default(50).describe('Maximum number of results. Default: 50'),
+    }),
+  },
+  searchDemographics: {
+    description: 'Search for Facebook demographic targeting categories by class.',
+    schema: z.object({
+      demographicClass: z
+        .enum(['demographics', 'life_events', 'industries', 'income', 'family_statuses', 'user_device', 'user_os'])
+        .describe('Demographic class to search'),
+      limit: z.number().optional().default(50).describe('Maximum number of results. Default: 50'),
+    }),
+  },
+  searchGeoLocations: {
+    description: 'Search for geographic locations for targeting (countries, cities, regions, etc.).',
+    schema: z.object({
+      query: z.string().describe('Location name to search for'),
+      locationTypes: z
+        .array(z.string())
+        .optional()
+        .describe('Filter by location type (e.g. ["country", "city", "region"])'),
+      limit: z.number().optional().default(25).describe('Maximum number of results. Default: 25'),
+    }),
+  },
+
+  // ==================== GROUP 5: Creatives ====================
+  getAdCreatives: {
+    description: 'Get all creatives associated with an ad.',
+    schema: z.object({
+      adId: z.string().describe('Ad ID to fetch creatives for'),
     }),
   },
 } satisfies Record<string, { description: string; schema: z.ZodTypeAny }>;

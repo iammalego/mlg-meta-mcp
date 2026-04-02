@@ -6,7 +6,7 @@
  */
 
 import { MetaApiClient } from './base-client.js';
-import type { MetaCampaign, MetaAdSet, MetaAd } from '../types/index.js';
+import type { MetaCampaign, MetaAdSet, MetaAd, MetaAdDetail } from '../types/index.js';
 import { getLogger } from '../utils/logger.js';
 
 const logger = getLogger();
@@ -188,11 +188,6 @@ export class GraphClient extends MetaApiClient {
     };
   }
 
-  /**
-   * Create a new campaign
-   *
-   * Endpoint: POST /{account-id}/campaigns
-   */
   async createCampaign(
     accountId: string,
     config: {
@@ -365,9 +360,9 @@ export class GraphClient extends MetaApiClient {
   }
 
   /**
-   * Create a new ad set
+   * Update an existing ad set
    *
-   * Endpoint: POST /{campaign-id}/adsets
+   * Endpoint: POST /{adset-id}
    */
   async createAdSet(
     campaignId: string,
@@ -402,11 +397,6 @@ export class GraphClient extends MetaApiClient {
     };
   }
 
-  /**
-   * Update an existing ad set
-   *
-   * Endpoint: POST /{adset-id}
-   */
   async updateAdSet(
     adSetId: string,
     updates: {
@@ -498,6 +488,249 @@ export class GraphClient extends MetaApiClient {
           : undefined,
       };
     });
+  }
+
+  // ==================== EXTENDED DETAIL OPERATIONS ====================
+
+  /**
+   * Get account-level info
+   *
+   * Endpoint: GET /{account-id}
+   */
+  async getAccountInfo(
+    accountId: string
+  ): Promise<{
+    id: string;
+    name: string;
+    currency: string;
+    timezoneId: string;
+    accountStatus: number;
+    business?: Record<string, unknown>;
+  }> {
+    const fields = ['id', 'name', 'currency', 'timezone_id', 'account_status', 'business'].join(
+      ','
+    );
+
+    const response = await this.get<{
+      id: string;
+      name: string;
+      currency: string;
+      timezone_id: string;
+      account_status: number;
+      business?: Record<string, unknown>;
+    }>(accountId, { fields });
+
+    return {
+      id: response.id,
+      name: response.name,
+      currency: response.currency,
+      timezoneId: response.timezone_id,
+      accountStatus: response.account_status,
+      business: response.business,
+    };
+  }
+
+  /**
+   * Get a campaign with extended fields (bid_strategy, buying_type, etc.)
+   *
+   * Endpoint: GET /{campaign-id}
+   */
+  async getCampaignDetails(campaignId: string): Promise<
+    MetaCampaign & {
+      bidStrategy?: string;
+      buyingType?: string;
+      specialAdCategories?: string[];
+      stopTime?: string;
+      issuesInfo?: Array<{ error_code: number; error_message: string; level: string }>;
+    }
+  > {
+    const fields = [
+      'id',
+      'name',
+      'status',
+      'effective_status',
+      'objective',
+      'daily_budget',
+      'lifetime_budget',
+      'budget_remaining',
+      'created_time',
+      'account_id',
+      'bid_strategy',
+      'buying_type',
+      'special_ad_categories',
+      'stop_time',
+      'issues_info',
+    ].join(',');
+
+    const response = await this.get<{
+      id: string;
+      name: string;
+      status: string;
+      effective_status?: string;
+      objective: string;
+      daily_budget?: string;
+      lifetime_budget?: string;
+      created_time?: string;
+      account_id?: string;
+      bid_strategy?: string;
+      buying_type?: string;
+      special_ad_categories?: string[];
+      stop_time?: string;
+      issues_info?: Array<{ error_code: number; error_message: string; level: string }>;
+    }>(campaignId, { fields });
+
+    return {
+      id: response.id,
+      name: response.name,
+      status: response.effective_status || response.status,
+      objective: response.objective,
+      dailyBudget: response.daily_budget ? parseInt(response.daily_budget, 10) : undefined,
+      lifetimeBudget: response.lifetime_budget ? parseInt(response.lifetime_budget, 10) : undefined,
+      createdTime: response.created_time || '',
+      accountId: response.account_id,
+      bidStrategy: response.bid_strategy,
+      buyingType: response.buying_type,
+      specialAdCategories: response.special_ad_categories,
+      stopTime: response.stop_time,
+      issuesInfo: response.issues_info,
+    };
+  }
+
+  /**
+   * Get an ad set with extended fields (bid_amount, effective_status, issues_info)
+   *
+   * Endpoint: GET /{adset-id}
+   */
+  async getAdSetDetails(adSetId: string): Promise<
+    MetaAdSet & {
+      bidAmount?: number;
+      effectiveStatus?: string;
+      issuesInfo?: Array<{ error_code: number; error_message: string; level: string }>;
+    }
+  > {
+    const fields = [
+      'id',
+      'name',
+      'campaign_id',
+      'status',
+      'effective_status',
+      'daily_budget',
+      'lifetime_budget',
+      'targeting',
+      'bid_strategy',
+      'billing_event',
+      'optimization_goal',
+      'bid_amount',
+      'issues_info',
+    ].join(',');
+
+    const response = await this.get<{
+      id: string;
+      name: string;
+      campaign_id: string;
+      status: string;
+      effective_status?: string;
+      daily_budget?: string;
+      lifetime_budget?: string;
+      targeting?: Record<string, unknown>;
+      bid_strategy?: string;
+      billing_event?: string;
+      optimization_goal?: string;
+      bid_amount?: number;
+      issues_info?: Array<{ error_code: number; error_message: string; level: string }>;
+    }>(adSetId, { fields });
+
+    return {
+      id: response.id,
+      name: response.name,
+      campaignId: response.campaign_id,
+      status: response.effective_status || response.status,
+      dailyBudget: response.daily_budget ? parseInt(response.daily_budget, 10) : undefined,
+      lifetimeBudget: response.lifetime_budget ? parseInt(response.lifetime_budget, 10) : undefined,
+      targeting: response.targeting,
+      bidStrategy: response.bid_strategy,
+      billingEvent: response.billing_event,
+      optimizationGoal: response.optimization_goal,
+      bidAmount: response.bid_amount,
+      effectiveStatus: response.effective_status,
+      issuesInfo: response.issues_info,
+    };
+  }
+
+  /**
+   * Get a single ad with full detail
+   *
+   * Endpoint: GET /{ad-id}
+   */
+  async getAdDetails(adId: string): Promise<MetaAdDetail> {
+    const fields = [
+      'id',
+      'name',
+      'status',
+      'effective_status',
+      'adset_id',
+      'campaign_id',
+      'creative{id}',
+      'issues_info',
+    ].join(',');
+
+    const response = await this.get<{
+      id: string;
+      name: string;
+      status: string;
+      effective_status: string;
+      adset_id: string;
+      campaign_id: string;
+      creative?: { id: string };
+      issues_info?: Array<{ error_code: number; error_message: string; level: string }>;
+    }>(adId, { fields });
+
+    return {
+      id: response.id,
+      name: response.name,
+      status: response.status,
+      effectiveStatus: response.effective_status,
+      adSetId: response.adset_id,
+      campaignId: response.campaign_id,
+      creativeId: response.creative?.id,
+      issuesInfo: response.issues_info,
+    };
+  }
+
+  async updateAd(
+    adId: string,
+    updates: { status?: 'ACTIVE' | 'PAUSED'; bidAmount?: number }
+  ): Promise<{ id: string }> {
+    const body: Record<string, unknown> = {};
+    if (updates.status) body.status = updates.status;
+    if (updates.bidAmount) body.bid_amount = updates.bidAmount;
+    return this.post<{ id: string }>(adId, body);
+  }
+
+  /**
+   * Create a budget schedule for a campaign
+   *
+   * Endpoint: POST /{campaign-id}/budget_schedules
+   */
+  async createBudgetSchedule(
+    campaignId: string,
+    config: {
+      budgetValue: number;
+      budgetValueType: 'ABSOLUTE' | 'MULTIPLIER';
+      timeStart: number;
+      timeEnd: number;
+    }
+  ): Promise<{ id: string }> {
+    const body: Record<string, unknown> = {
+      budget_value: config.budgetValue,
+      budget_value_type: config.budgetValueType,
+      time_start: config.timeStart,
+      time_end: config.timeEnd,
+    };
+
+    const response = await this.post<{ id: string }>(`${campaignId}/budget_schedules`, body);
+
+    return { id: response.id };
   }
 
   /**

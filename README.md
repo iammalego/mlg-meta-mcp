@@ -5,9 +5,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-green.svg)](https://modelcontextprotocol.io/)
 
-Open-source MCP server for Meta Ads with account discovery, campaign operations, insights, and LLM-friendly workflows.
+Open-source MCP server for Meta Ads — 30 tools covering account discovery, campaign/ad set/ad management, targeting research, creative inspection, insights, and LLM-friendly workflows.
 
-`mlg-meta-mcp` is designed for developers and operators who want more than a thin proxy over the Meta Marketing API. It adds account discovery, business-oriented outputs, productivity tools, and comparison flows that are easier for LLMs and agents to use in real workflows.
+`mlg-meta-mcp` is designed for developers and operators who want more than a thin proxy over the Meta Marketing API. It adds account discovery, business-oriented outputs, productivity tools, comparison flows, and targeting/creative tooling that are easier for LLMs and agents to use in real workflows.
 
 ## Why this project exists
 
@@ -36,10 +36,12 @@ Core MCP tools should return maximal useful signal for the broadest set of consu
 
 - Discover all ad accounts accessible by the configured System User token
 - Resolve accounts by ID or by account name
+- Get full account info (name, currency, timezone, business, status)
 
 ### Campaign operations
 
 - Get campaigns
+- Get full campaign details (bid strategy, buying type, special ad categories, issues)
 - Create campaigns
 - Update campaigns
 - Pause campaigns
@@ -48,6 +50,7 @@ Core MCP tools should return maximal useful signal for the broadest set of consu
 ### Ad set operations
 
 - Get ad sets from an account or campaign
+- Get full ad set details (targeting, optimization goal, bid amount, effective status)
 - Create ad sets
 - Update ad sets
 - Pause ad sets
@@ -56,6 +59,25 @@ Core MCP tools should return maximal useful signal for the broadest set of consu
 ### Ad operations
 
 - Get ads
+- Get full ad details (effective status, creative ID, issues)
+- Update ads (status and bid amount)
+
+### Creative inspection
+
+- Get creatives attached to an ad (object_story_spec, image hash, call to action)
+
+### Targeting research
+
+- Search interests by keyword
+- Get interest suggestions from a seed list
+- Validate interests by name or Meta ID
+- Browse behaviors
+- Browse demographic categories
+- Search geo locations by keyword
+
+### Budget scheduling
+
+- Create time-bounded budget increases or multipliers for a campaign
 
 ### Insights and analysis
 
@@ -80,6 +102,8 @@ This MCP is especially useful for these workflows:
 4. **Duplicate winning structures quickly**
 5. **Pause or activate many campaigns in one action**
 6. **Generate alert-oriented summaries from Meta Ads data**
+7. **Research and validate targeting audiences**
+8. **Diagnose delivery issues via effective status and issues_info**
 
 ## How `compareTwoPeriods` works
 
@@ -218,41 +242,60 @@ Any MCP client that supports stdio transport can run this server by starting the
 
 ## Available tools
 
-### Account Discovery Tools
+30 tools total.
+
+### Account tools
 
 - `discoverAdAccounts`
+- `getAccountInfo`
 
-### Campaign Tools
+### Campaign tools
 
 - `getCampaigns`
-- `createCampaign`
+- `getCampaignDetails`
 - `updateCampaign`
 - `pauseCampaign`
 - `activateCampaign`
+- `cloneCampaign`
+- `bulkPauseCampaigns`
+- `bulkActivateCampaigns`
 
-### AdSet Tools
+### Ad set tools
 
 - `getAdSets`
-- `createAdSet`
+- `getAdSetDetails`
 - `updateAdSet`
 - `pauseAdSet`
 - `activateAdSet`
+- `cloneAdSet`
 
-### Ad Tools
+### Ad tools
 
 - `getAds`
+- `getAdDetails`
+- `updateAd`
 
-### Insights Tools
+### Creative tools
+
+- `getAdCreatives`
+
+### Targeting tools
+
+- `searchInterests`
+- `getInterestSuggestions`
+- `validateInterests`
+- `searchBehaviors`
+- `searchDemographics`
+- `searchGeoLocations`
+
+### Budget tools
+
+- `createBudgetSchedule`
+
+### Insights tools
 
 - `getInsights`
 - `compareTwoPeriods`
-
-### Productivity Tools
-
-- `cloneCampaign`
-- `cloneAdSet`
-- `bulkPauseCampaigns`
-- `bulkActivateCampaigns`
 - `checkAlerts`
 
 ## Example prompts
@@ -261,11 +304,15 @@ These are the kinds of prompts this MCP is designed to support well:
 
 - "List all ad accounts accessible with this token."
 - "Show active campaigns for the account named Plannit."
+- "Get full details for campaign 123 including issues and delivery status."
 - "Compare this campaign between last_7d and last_30d."
 - "If the campaign did not exist in the previous period, explain which fallback reference was used."
 - "Clone this campaign and reduce its budget by 20%."
 - "Pause these campaigns as a dry run first."
 - "Check alerts for yesterday using a CPR threshold of 5000."
+- "Search interests related to 'sustainable fashion' and suggest related ones."
+- "Validate these interest IDs before using them in a new ad set."
+- "Schedule a budget increase of 20% for campaign 123 this weekend."
 
 ## Architecture
 
@@ -274,7 +321,7 @@ The codebase is intentionally split into layers:
 - `src/tools/index.ts` → MCP tool definitions and Zod-first schemas
 - `src/tools/handlers.ts` → MCP-facing handlers and MCP response envelopes (text summaries plus structured content when useful)
 - `src/services/*` → business logic
-- `src/api/*` → Meta API clients
+- `src/api/*` → Meta API clients (`GraphClient`, `InsightsClient`, `BusinessClient`, `TargetingClient`, `CreativeClient`)
 - `src/types/*` → shared types
 
 This separation helps keep the MCP surface, business logic, and Meta API integration independent.
@@ -302,19 +349,16 @@ Project status:
 
 ## Roadmap
 
-Near-term priorities:
-
-- stronger test coverage for critical workflows
-- richer insights outputs and summaries
-- continued polish for open-source release quality
-
 Planned features:
 
-- **Ad creation** — creating ads requires a valid Meta page ID and a page-linked creative payload. The current implementation does not yet support this reliably; it is tracked as a future feature.
+- **Delivery diagnosis** — explain why a campaign, ad set, or ad is not delivering (billing issues, policy violations, parent paused, bid too low, etc.) using `issues_info` and `effective_status`
+- **Learning phase status** — expose whether an ad set is in learning, how many conversions remain to exit, and whether it is `LEARNING_LIMITED` and why
+- **Ad fatigue detection** — detect when an ad needs creative rotation by combining frequency trends with CTR decay
+- **Attribution comparison** — side-by-side view of 1d/7d click and view attribution windows for the same object
+- **Placement breakdown** — performance by placement (Feed, Stories, Reels, Audience Network, Messenger)
 
 Possible future directions:
 
-- more advanced reporting and breakdowns
 - remote MCP support
 - broader automation and monitoring flows
 

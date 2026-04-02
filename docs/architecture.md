@@ -45,7 +45,7 @@ That means documentation, validation, and MCP discovery should all stay aligned 
 ### Tool registry and handlers
 
 - `src/tools/index.ts`
-  - defines all 19 public tools
+  - defines all 30 public tools
   - exports MCP-friendly schemas
   - enforces argument validation
 - `src/tools/handlers.ts`
@@ -81,9 +81,18 @@ That means documentation, validation, and MCP discovery should all stay aligned 
 - `src/api/business-client.ts`
   - account discovery through Business endpoints
 - `src/api/graph-client.ts`
-  - campaigns, ad sets, and ads CRUD/status operations
+  - campaigns, ad sets, ads CRUD/status operations
+  - detail getters (getAccountInfo, getCampaignDetails, getAdSetDetails, getAdDetails)
+  - ad creation and update
+  - budget schedule creation
 - `src/api/insights-client.ts`
   - insights reads for account, campaign, ad set, and ad levels
+- `src/api/targeting-client.ts`
+  - targeting search tools via Meta's `/search` endpoint
+  - interests, behaviors, demographics, geo locations
+- `src/api/creative-client.ts`
+  - ad creative reads and writes
+  - image uploads via multipart/form-data
 
 ## `compareTwoPeriods` placement
 

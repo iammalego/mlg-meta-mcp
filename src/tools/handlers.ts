@@ -10,6 +10,8 @@ import { CampaignService } from '../services/campaign-service.js';
 import { AdSetService } from '../services/adset-service.js';
 import { AdService } from '../services/ad-service.js';
 import { InsightsService } from '../services/insights-service.js';
+import { GraphClient } from '../api/graph-client.js';
+import { TargetingClient, CreativeClient } from '../api/client.js';
 import { getLogger } from '../utils/logger.js';
 import { MetaMcpError, ErrorCategory } from '../utils/errors.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -92,6 +94,9 @@ let campaignService: CampaignService | null = null;
 let adSetService: AdSetService | null = null;
 let adService: AdService | null = null;
 let insightsService: InsightsService | null = null;
+let graphClient: GraphClient | null = null;
+let targetingClient: TargetingClient | null = null;
+let creativeClient: CreativeClient | null = null;
 
 export function initializeHandlers(accessToken: string): void {
   accountService = new AccountService(accessToken);
@@ -99,6 +104,9 @@ export function initializeHandlers(accessToken: string): void {
   adSetService = new AdSetService(accessToken, accountService);
   adService = new AdService(accessToken);
   insightsService = new InsightsService(accessToken, accountService);
+  graphClient = new GraphClient(accessToken);
+  targetingClient = new TargetingClient(accessToken);
+  creativeClient = new CreativeClient(accessToken);
   logger.info('All services initialized');
 }
 
@@ -112,7 +120,16 @@ export async function handleToolCall(
   logger.info({ tool: name }, 'Executing tool');
 
   try {
-    if (!accountService || !campaignService || !adSetService || !adService || !insightsService) {
+    if (
+      !accountService ||
+      !campaignService ||
+      !adSetService ||
+      !adService ||
+      !insightsService ||
+      !graphClient ||
+      !targetingClient ||
+      !creativeClient
+    ) {
       throw new MetaMcpError(
         ErrorCategory.VALIDATION,
         'Handlers not initialized. Call initializeHandlers() with a valid token first.'
@@ -129,8 +146,6 @@ export async function handleToolCall(
       // Campaigns
       case 'getCampaigns':
         return await handleGetCampaigns(parsedArgs);
-      case 'createCampaign':
-        return await handleCreateCampaign(parsedArgs);
       case 'updateCampaign':
         return await handleUpdateCampaign(parsedArgs);
       case 'pauseCampaign':
@@ -141,8 +156,6 @@ export async function handleToolCall(
       // AdSets
       case 'getAdSets':
         return await handleGetAdSets(parsedArgs);
-      case 'createAdSet':
-        return await handleCreateAdSet(parsedArgs);
       case 'updateAdSet':
         return await handleUpdateAdSet(parsedArgs);
       case 'pauseAdSet':
@@ -171,6 +184,40 @@ export async function handleToolCall(
         return await handleGetInsights(parsedArgs);
       case 'compareTwoPeriods':
         return await handleCompareTwoPeriods(parsedArgs);
+
+      // Detail Getters
+      case 'getAccountInfo':
+        return await handleGetAccountInfo(parsedArgs);
+      case 'getCampaignDetails':
+        return await handleGetCampaignDetails(parsedArgs);
+      case 'getAdSetDetails':
+        return await handleGetAdSetDetails(parsedArgs);
+      case 'getAdDetails':
+        return await handleGetAdDetails(parsedArgs);
+      case 'updateAd':
+        return await handleUpdateAd(parsedArgs);
+
+      // Budget
+      case 'createBudgetSchedule':
+        return await handleCreateBudgetSchedule(parsedArgs);
+
+      // Targeting Research
+      case 'searchInterests':
+        return await handleSearchInterests(parsedArgs);
+      case 'getInterestSuggestions':
+        return await handleGetInterestSuggestions(parsedArgs);
+      case 'validateInterests':
+        return await handleValidateInterests(parsedArgs);
+      case 'searchBehaviors':
+        return await handleSearchBehaviors(parsedArgs);
+      case 'searchDemographics':
+        return await handleSearchDemographics(parsedArgs);
+      case 'searchGeoLocations':
+        return await handleSearchGeoLocations(parsedArgs);
+
+      // Creatives
+      case 'getAdCreatives':
+        return await handleGetAdCreatives(parsedArgs);
 
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -265,41 +312,6 @@ async function handleGetCampaigns(
       {
         type: 'text',
         text: `Campaigns${statusFilter} found (${campaigns.length}):\n\n${lines.join('\n\n')}`,
-      },
-    ],
-  };
-}
-
-async function handleCreateCampaign(
-  args: Record<string, unknown> | undefined
-): Promise<CallToolResult> {
-  const accountId = args?.accountId as string;
-  const name = args?.name as string;
-  const objective = args?.objective as string;
-  const status = args?.status as 'ACTIVE' | 'PAUSED';
-  const dailyBudget = args?.dailyBudget as number | undefined;
-  const lifetimeBudget = args?.lifetimeBudget as number | undefined;
-
-  if (!accountId || !name || !objective) {
-    throw new MetaMcpError(
-      ErrorCategory.VALIDATION,
-      'Required parameters: accountId, name, objective'
-    );
-  }
-
-  const result = await campaignService!.createCampaign(accountId, {
-    name,
-    objective,
-    status,
-    dailyBudget,
-    lifetimeBudget,
-  });
-
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Campaign created:\n\nName: ${result.name}\nID: ${result.id}\nStatus: ${status}`,
       },
     ],
   };
@@ -429,37 +441,6 @@ async function handleGetAdSets(args: Record<string, unknown> | undefined): Promi
       {
         type: 'text',
         text: `Ad Sets${statusFilter} found (${adsets.length}):\n\n${lines.join('\n\n')}`,
-      },
-    ],
-  };
-}
-
-async function handleCreateAdSet(
-  args: Record<string, unknown> | undefined
-): Promise<CallToolResult> {
-  const campaignId = args?.campaignId as string;
-  const name = args?.name as string;
-
-  if (!campaignId || !name) {
-    throw new MetaMcpError(ErrorCategory.VALIDATION, 'Required parameters: campaignId, name');
-  }
-
-  const result = await adSetService!.createAdSet(campaignId, {
-    name,
-    dailyBudget: args?.dailyBudget as number | undefined,
-    lifetimeBudget: args?.lifetimeBudget as number | undefined,
-    targeting: args?.targeting as Record<string, unknown> | undefined,
-    bidStrategy: args?.bidStrategy as string | undefined,
-    billingEvent: args?.billingEvent as string | undefined,
-    optimizationGoal: args?.optimizationGoal as string | undefined,
-    status: (args?.status as 'ACTIVE' | 'PAUSED') || 'PAUSED',
-  });
-
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Ad Set created:\n\nName: ${result.name}\nID: ${result.id}\nCampaign: ${campaignId}`,
       },
     ],
   };
@@ -1142,3 +1123,254 @@ async function handleCheckAlerts(
     ],
   };
 }
+
+// ==================== DETAIL GETTER HANDLERS ====================
+
+async function handleGetAccountInfo(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const accountId = args?.accountId as string;
+  const result = await graphClient!.getAccountInfo(accountId);
+
+  return {
+    structuredContent: result,
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleGetCampaignDetails(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const campaignId = args?.campaignId as string;
+  const result = await graphClient!.getCampaignDetails(campaignId);
+
+  return {
+    structuredContent: result as unknown as Record<string, unknown>,
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleGetAdSetDetails(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const adSetId = args?.adSetId as string;
+  const result = await graphClient!.getAdSetDetails(adSetId);
+
+  return {
+    structuredContent: result as unknown as Record<string, unknown>,
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleGetAdDetails(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const adId = args?.adId as string;
+  const result = await graphClient!.getAdDetails(adId);
+
+  return {
+    structuredContent: result as unknown as Record<string, unknown>,
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleUpdateAd(args: Record<string, unknown> | undefined): Promise<CallToolResult> {
+  const adId = args?.adId as string;
+  const status = args?.status as 'ACTIVE' | 'PAUSED' | undefined;
+  const bidAmount = args?.bidAmount as number | undefined;
+
+  const result = await graphClient!.updateAd(adId, { status, bidAmount });
+
+  const lines = [`Ad updated successfully.`, `ID: ${result.id}`];
+  if (status !== undefined) lines.push(`Status: ${status}`);
+  if (bidAmount !== undefined) lines.push(`Bid Amount: ${bidAmount}`);
+
+  return {
+    content: [{ type: 'text', text: lines.join('\n') }],
+  };
+}
+
+// ==================== BUDGET HANDLERS ====================
+
+async function handleCreateBudgetSchedule(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const campaignId = args?.campaignId as string;
+  const budgetValue = args?.budgetValue as number;
+  const budgetValueType = args?.budgetValueType as 'ABSOLUTE' | 'MULTIPLIER';
+  const timeStart = args?.timeStart as number;
+  const timeEnd = args?.timeEnd as number;
+
+  const result = await graphClient!.createBudgetSchedule(campaignId, {
+    budgetValue,
+    budgetValueType,
+    timeStart,
+    timeEnd,
+  });
+
+  return {
+    structuredContent: result,
+    content: [
+      {
+        type: 'text',
+        text: `Budget schedule created:\n\nID: ${result.id}\nCampaign: ${campaignId}\nType: ${budgetValueType}\nValue: ${budgetValue}`,
+      },
+    ],
+  };
+}
+
+// ==================== TARGETING RESEARCH HANDLERS ====================
+
+async function handleSearchInterests(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const query = args?.query as string;
+  const limit = (args?.limit as number) ?? 25;
+
+  const result = await targetingClient!.searchInterests(query, limit);
+
+  return {
+    structuredContent: { items: result },
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleGetInterestSuggestions(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const interestList = args?.interestList as string[];
+  const limit = (args?.limit as number) ?? 25;
+
+  const result = await targetingClient!.getInterestSuggestions(interestList, limit);
+
+  return {
+    structuredContent: { items: result },
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleValidateInterests(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const interestList = args?.interestList as string[] | undefined;
+  const interestFbidList = args?.interestFbidList as string[] | undefined;
+
+  const result = await targetingClient!.validateInterests(interestList, interestFbidList);
+
+  return {
+    structuredContent: { items: result },
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleSearchBehaviors(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const limit = (args?.limit as number) ?? 50;
+
+  const result = await targetingClient!.searchBehaviors(limit);
+
+  return {
+    structuredContent: { items: result },
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleSearchDemographics(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const demographicClass = args?.demographicClass as string;
+  const limit = (args?.limit as number) ?? 50;
+
+  const result = await targetingClient!.searchDemographics(demographicClass, limit);
+
+  return {
+    structuredContent: { items: result },
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+async function handleSearchGeoLocations(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const query = args?.query as string;
+  const locationTypes = args?.locationTypes as string[] | undefined;
+  const limit = (args?.limit as number) ?? 25;
+
+  const result = await targetingClient!.searchGeoLocations(query, locationTypes, limit);
+
+  return {
+    structuredContent: { items: result },
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+// ==================== CREATIVE HANDLERS ====================
+
+async function handleGetAdCreatives(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const adId = args?.adId as string;
+  const result = await creativeClient!.getAdCreatives(adId);
+
+  return {
+    structuredContent: { items: result },
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+

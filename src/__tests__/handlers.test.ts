@@ -1,5 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockGraphClient = {
+  getAccountInfo: vi.fn(),
+  getCampaignDetails: vi.fn(),
+  getAdSetDetails: vi.fn(),
+  getAdDetails: vi.fn(),
+  updateAd: vi.fn(),
+  createBudgetSchedule: vi.fn(),
+};
+
+const mockTargetingClient = {
+  searchInterests: vi.fn(),
+  getInterestSuggestions: vi.fn(),
+  validateInterests: vi.fn(),
+  searchBehaviors: vi.fn(),
+  searchDemographics: vi.fn(),
+  searchGeoLocations: vi.fn(),
+};
+
+const mockCreativeClient = {
+  getAdCreatives: vi.fn(),
+};
+
+vi.mock('../api/graph-client.js', () => ({
+  GraphClient: vi.fn().mockImplementation(() => mockGraphClient),
+}));
+
+vi.mock('../api/client.js', () => ({
+  TargetingClient: vi.fn().mockImplementation(() => mockTargetingClient),
+  CreativeClient: vi.fn().mockImplementation(() => mockCreativeClient),
+}));
+
 const mockAccountService = {
   discoverAdAccounts: vi.fn(),
   getAccount: vi.fn(),
@@ -478,3 +509,406 @@ describe('handleToolCall compareTwoPeriods', () => {
     expect(textContent.text).not.toContain('Resolved Action Type:');
   });
 });
+
+// ==================== GROUP 1: DETAIL GETTERS ====================
+
+describe('handleToolCall getAccountInfo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns full account info with all expected fields', async () => {
+    mockGraphClient.getAccountInfo.mockResolvedValue({
+      id: 'act_123',
+      name: 'Test Account',
+      currency: 'USD',
+      timezoneId: '1',
+      accountStatus: 1,
+      business: { id: 'biz_1', name: 'Test Biz' },
+    });
+
+    const result = await handleToolCall('getAccountInfo', { accountId: 'act_123' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('"name"');
+    expect(textContent.text).toContain('"currency"');
+    expect(textContent.text).toContain('"timezoneId"');
+    expect(textContent.text).toContain('"accountStatus"');
+    expect(textContent.text).toContain('"business"');
+    expect(textContent.text).toContain('Test Account');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall getCampaignDetails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns campaign details with bidStrategy, buyingType and issues fields', async () => {
+    mockGraphClient.getCampaignDetails.mockResolvedValue({
+      id: 'cmp_1',
+      name: 'Test Campaign',
+      status: 'ACTIVE',
+      objective: 'LEAD_GENERATION',
+      dailyBudget: 5000,
+      lifetimeBudget: undefined,
+      createdTime: '2026-01-01',
+      accountId: 'act_123',
+      bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+      buyingType: 'AUCTION',
+      specialAdCategories: [],
+      stopTime: undefined,
+      issuesInfo: [{ error_code: 1815745, error_message: 'Delivery issue', level: 'campaign' }],
+    });
+
+    const result = await handleToolCall('getCampaignDetails', { campaignId: 'cmp_1' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('"bidStrategy"');
+    expect(textContent.text).toContain('"buyingType"');
+    expect(textContent.text).toContain('"issuesInfo"');
+    expect(textContent.text).toContain('LOWEST_COST_WITHOUT_CAP');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall getAdSetDetails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns ad set details with bidAmount and effectiveStatus fields', async () => {
+    mockGraphClient.getAdSetDetails.mockResolvedValue({
+      id: 'adset_1',
+      name: 'Test Ad Set',
+      campaignId: 'cmp_1',
+      status: 'ACTIVE',
+      dailyBudget: 2000,
+      lifetimeBudget: undefined,
+      bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+      billingEvent: 'IMPRESSIONS',
+      optimizationGoal: 'LEAD_GENERATION',
+      bidAmount: 150,
+      effectiveStatus: 'ACTIVE',
+    });
+
+    const result = await handleToolCall('getAdSetDetails', { adSetId: 'adset_1' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('"bidAmount"');
+    expect(textContent.text).toContain('"effectiveStatus"');
+    expect(textContent.text).toContain('150');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall getAdDetails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns ad details with adSetId, campaignId and creativeId fields', async () => {
+    mockGraphClient.getAdDetails.mockResolvedValue({
+      id: 'ad_1',
+      name: 'Test Ad',
+      status: 'PAUSED',
+      effectiveStatus: 'PAUSED',
+      adSetId: 'adset_1',
+      campaignId: 'cmp_1',
+      creativeId: 'creative_1',
+    });
+
+    const result = await handleToolCall('getAdDetails', { adId: 'ad_1' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('"adSetId"');
+    expect(textContent.text).toContain('"campaignId"');
+    expect(textContent.text).toContain('"creativeId"');
+    expect(textContent.text).toContain('adset_1');
+    expect(textContent.text).toContain('cmp_1');
+    expect(textContent.text).toContain('creative_1');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+// ==================== GROUP 2: AD OPERATIONS ====================
+
+
+describe('handleToolCall updateAd', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('updates ad status and returns the ID', async () => {
+    mockGraphClient.updateAd.mockResolvedValue({ id: 'ad_1' });
+
+    const result = await handleToolCall('updateAd', {
+      adId: 'ad_1',
+      status: 'PAUSED',
+    });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('ID: ad_1');
+    expect(textContent.text).toContain('Status: PAUSED');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+// ==================== GROUP 3: BUDGET SCHEDULE ====================
+
+describe('handleToolCall createBudgetSchedule', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns schedule ID in response', async () => {
+    mockGraphClient.createBudgetSchedule.mockResolvedValue({ id: 'schedule_42' });
+
+    const result = await handleToolCall('createBudgetSchedule', {
+      campaignId: 'cmp_1',
+      budgetValue: 20000,
+      budgetValueType: 'ABSOLUTE',
+      timeStart: 1700000000,
+      timeEnd: 1700086400,
+    });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('ID: schedule_42');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+// ==================== GROUP 4: TARGETING ====================
+
+describe('handleToolCall searchInterests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns empty array when no results found', async () => {
+    mockTargetingClient.searchInterests.mockResolvedValue([]);
+
+    const result = await handleToolCall('searchInterests', { query: 'obscure term' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('[]');
+    expect(result.isError).toBeFalsy();
+  });
+
+  it('returns array of items with id and name', async () => {
+    mockTargetingClient.searchInterests.mockResolvedValue([
+      { id: '6003139266461', name: 'Soccer' },
+      { id: '6003020834693', name: 'Football' },
+    ]);
+
+    const result = await handleToolCall('searchInterests', { query: 'soccer' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('Soccer');
+    expect(textContent.text).toContain('Football');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall getInterestSuggestions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns empty array when no suggestions found', async () => {
+    mockTargetingClient.getInterestSuggestions.mockResolvedValue([]);
+
+    const result = await handleToolCall('getInterestSuggestions', {
+      interestList: ['6003139266461'],
+    });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('[]');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall validateInterests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns empty array when interests are invalid', async () => {
+    mockTargetingClient.validateInterests.mockResolvedValue([]);
+
+    const result = await handleToolCall('validateInterests', {
+      interestList: ['nonexistent interest'],
+    });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('[]');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall searchBehaviors', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns empty array when no behaviors found', async () => {
+    mockTargetingClient.searchBehaviors.mockResolvedValue([]);
+
+    const result = await handleToolCall('searchBehaviors', {});
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('[]');
+    expect(result.isError).toBeFalsy();
+  });
+
+  it('returns array of items with id and name', async () => {
+    mockTargetingClient.searchBehaviors.mockResolvedValue([
+      { id: 'beh_1', name: 'Early adopters' },
+    ]);
+
+    const result = await handleToolCall('searchBehaviors', {});
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('Early adopters');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall searchDemographics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns empty array when no demographics found', async () => {
+    mockTargetingClient.searchDemographics.mockResolvedValue([]);
+
+    const result = await handleToolCall('searchDemographics', {
+      demographicClass: 'life_events',
+    });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('[]');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('handleToolCall searchGeoLocations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns empty array when no geo results found', async () => {
+    mockTargetingClient.searchGeoLocations.mockResolvedValue([]);
+
+    const result = await handleToolCall('searchGeoLocations', { query: 'zzz' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('[]');
+    expect(result.isError).toBeFalsy();
+  });
+
+  it('returns array of items with id and name', async () => {
+    mockTargetingClient.searchGeoLocations.mockResolvedValue([
+      { id: 'AR', name: 'Argentina' },
+    ]);
+
+    const result = await handleToolCall('searchGeoLocations', { query: 'Argentina' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('Argentina');
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+// ==================== GROUP 5: CREATIVES ====================
+
+describe('handleToolCall getAdCreatives', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  it('returns mapped creative fields including objectStorySpec, imageHash, callToAction', async () => {
+    mockCreativeClient.getAdCreatives.mockResolvedValue([
+      {
+        id: 'creative_1',
+        name: 'My Creative',
+        objectStorySpec: { page_id: 'page_1', link_data: { link: 'https://example.com' } },
+        imageHash: 'abc123hash',
+        callToAction: { type: 'LEARN_MORE' },
+      },
+    ]);
+
+    const result = await handleToolCall('getAdCreatives', { adId: 'ad_1' });
+
+    const textContent = result.content[0];
+    expect(textContent?.type).toBe('text');
+    if (textContent?.type !== 'text') throw new Error('Expected text content');
+
+    expect(textContent.text).toContain('"objectStorySpec"');
+    expect(textContent.text).toContain('"imageHash"');
+    expect(textContent.text).toContain('"callToAction"');
+    expect(textContent.text).toContain('abc123hash');
+    expect(textContent.text).toContain('LEARN_MORE');
+    expect(result.isError).toBeFalsy();
+  });
+});
+

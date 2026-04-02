@@ -8,6 +8,9 @@
  * - Error categorization
  */
 
+export { TargetingClient } from './targeting-client.js';
+export { CreativeClient } from './creative-client.js';
+
 export class MetaApiClient {
   constructor(accessToken: string, apiVersion: string = 'v22.0') {
     void accessToken;

@@ -1,6 +1,6 @@
 # API Reference
 
-This project currently exposes **19 MCP tools**. The tool registry in `src/tools/index.ts` is the authoritative source for names, descriptions, and argument validation.
+This project currently exposes **30 MCP tools**. The tool registry in `src/tools/index.ts` is the authoritative source for names, descriptions, and argument validation.
 
 ## Conventions
 
@@ -10,41 +10,71 @@ This project currently exposes **19 MCP tools**. The tool registry in `src/tools
 - Validation is enforced from Zod schemas before a handler runs.
 - Core tool contracts preserve maximal useful signal; consumers own filtering and interpretation.
 
-## Account discovery
+## Account tools
 
 | Tool                 | Purpose                                                          | Key arguments |
 | -------------------- | ---------------------------------------------------------------- | ------------- |
-| `discoverAdAccounts` | List ad accounts accessible to the configured System User token. | None          |
+| `discoverAdAccounts` | List ad accounts accessible to the configured System User token. | None |
+| `getAccountInfo` | Get full account details: name, currency, timezone, status, business. | `accountId` |
 
 ## Campaign tools
 
-| Tool               | Purpose                                                           | Key arguments                                                                  |
-| ------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `getCampaigns`     | List campaigns for an ad account, with optional status filtering. | `accountId`, `status` (`ACTIVE`/`PAUSED`/`ALL`)                                |
-| `createCampaign`   | Create a campaign in an account.                                  | `accountId`, `name`, `objective`, `status`, `dailyBudget?`, `lifetimeBudget?`  |
-| `updateCampaign`   | Update campaign fields selectively.                               | `campaignId`, one or more of `name`, `status`, `dailyBudget`, `lifetimeBudget` |
-| `pauseCampaign`    | Pause a campaign.                                                 | `campaignId`                                                                   |
-| `activateCampaign` | Reactivate a paused campaign.                                     | `campaignId`                                                                   |
+| Tool                  | Purpose                                                           | Key arguments                                                                  |
+| --------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `getCampaigns`        | List campaigns for an ad account, with optional status filtering. | `accountId`, `status` (`ACTIVE`/`PAUSED`/`ALL`)                                |
+| `getCampaignDetails`  | Get full campaign details including bid strategy, buying type, special ad categories, stop time, and issues. | `campaignId` |
+| `updateCampaign`      | Update campaign fields selectively.                               | `campaignId`, one or more of `name`, `status`, `dailyBudget`, `lifetimeBudget` |
+| `pauseCampaign`       | Pause a campaign.                                                 | `campaignId`                                                                   |
+| `activateCampaign`    | Reactivate a paused campaign.                                     | `campaignId`                                                                   |
+| `cloneCampaign`       | Clone a campaign structure, optionally copying ad sets.           | `sourceCampaignId`, `newName`, `copyAdSets?`, `budgetAdjustment?`              |
+| `bulkPauseCampaigns`  | Pause multiple campaigns in one request, with optional dry run.   | `campaignIds[]`, `dryRun?`                                                     |
+| `bulkActivateCampaigns` | Activate multiple campaigns in one request, with optional dry run. | `campaignIds[]`, `dryRun?`                                                  |
 
 ## Ad set tools
 
-| Tool            | Purpose                                 | Key arguments                                                                                                                          |
-| --------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `getAdSets`     | List ad sets for a campaign or account. | `campaignId?`, `accountId?`, `status` (`ACTIVE`/`PAUSED`/`ALL`)                                                                        |
-| `createAdSet`   | Create an ad set under a campaign.      | `campaignId`, `name`, `dailyBudget?`, `lifetimeBudget?`, `targeting?`, `bidStrategy?`, `billingEvent?`, `optimizationGoal?`, `status?` |
-| `updateAdSet`   | Update ad set fields selectively.       | `adSetId`, one or more of `name`, `status`, `dailyBudget`, `lifetimeBudget`, `targeting`                                               |
-| `pauseAdSet`    | Pause an ad set.                        | `adSetId`                                                                                                                              |
-| `activateAdSet` | Reactivate a paused ad set.             | `adSetId`                                                                                                                              |
+| Tool               | Purpose                                 | Key arguments                                                                                                    |
+| ------------------ | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `getAdSets`        | List ad sets for a campaign or account. | `campaignId?`, `accountId?`, `status` (`ACTIVE`/`PAUSED`/`ALL`)                                                 |
+| `getAdSetDetails`  | Get full ad set details including targeting, optimization goal, bid amount, and effective status. | `adSetId` |
+| `updateAdSet`      | Update ad set fields selectively.       | `adSetId`, one or more of `name`, `status`, `dailyBudget`, `lifetimeBudget`, `targeting`                         |
+| `pauseAdSet`       | Pause an ad set.                        | `adSetId`                                                                                                        |
+| `activateAdSet`    | Reactivate a paused ad set.             | `adSetId`                                                                                                        |
+| `cloneAdSet`       | Clone an ad set into a target campaign. | `sourceAdSetId`, `targetCampaignId`, `newName?`                                                                  |
 
 At least one parent identifier is required for `getAdSets`.
 
 ## Ad tools
 
-| Tool     | Purpose                             | Key arguments                                                 |
-| -------- | ----------------------------------- | ------------------------------------------------------------- |
-| `getAds` | List ads for an ad set or campaign. | `adSetId?`, `campaignId?`, `status` (`ACTIVE`/`PAUSED`/`ALL`) |
+| Tool           | Purpose                             | Key arguments                                                 |
+| -------------- | ----------------------------------- | ------------------------------------------------------------- |
+| `getAds`       | List ads for an ad set or campaign. | `adSetId?`, `campaignId?`, `status` (`ACTIVE`/`PAUSED`/`ALL`) |
+| `getAdDetails` | Get full ad details including effective status, creative ID, and issues. | `adId` |
+| `updateAd`     | Update ad status and/or bid amount. | `adId`, `status?`, `bidAmount?` |
 
-> **Ad creation** is planned but not yet available. Creating ads requires a Meta-linked page ID and a fully constructed creative payload. See the project roadmap.
+## Creative tools
+
+| Tool             | Purpose                             | Key arguments |
+| ---------------- | ----------------------------------- | ------------- |
+| `getAdCreatives` | Get creatives attached to an ad (object_story_spec, image hash, call to action). | `adId` |
+
+## Targeting tools
+
+| Tool                      | Purpose                             | Key arguments                                                 |
+| ------------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| `searchInterests`         | Search interests by keyword. Returns id, name, audience_size. | `query`, `limit?` |
+| `getInterestSuggestions`  | Get interest suggestions from a seed interest list. | `interestList` (string[]), `limit?` |
+| `validateInterests`       | Validate interests by name or Meta ID. At least one list required. | `interestList?` (string[]), `interestFbidList?` (string[]) |
+| `searchBehaviors`         | Browse all behavior targeting categories. | `limit?` |
+| `searchDemographics`      | Browse demographic targeting categories by class. | `demographicClass`, `limit?` |
+| `searchGeoLocations`      | Search geo locations by keyword. | `query`, `locationTypes?` (string[]), `limit?` |
+
+All targeting tools return `[]` when the search produces no results (never an error).
+
+## Budget tools
+
+| Tool                   | Purpose                             | Key arguments                                                 |
+| ---------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| `createBudgetSchedule` | Create a time-bounded budget multiplier or absolute increase for a campaign. | `campaignId`, `budgetValue`, `budgetValueType` (`ABSOLUTE`/`MULTIPLIER`), `timeStart` (Unix timestamp), `timeEnd` (Unix timestamp) |
 
 ## Insights tools
 
@@ -216,15 +246,6 @@ Candidates that pass those hard checks are ranked by:
 
 If no candidate qualifies but the account has campaign insights for the previous period, the service uses the account campaign average. If even that does not exist, the comparison falls back to zeroed historical metrics and reports that no usable reference was available.
 
-## Productivity tools
-
-| Tool                    | Purpose                                                            | Key arguments                                                            |
-| ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `cloneCampaign`         | Clone a campaign structure, optionally copying ad sets.            | `sourceCampaignId`, `newName`, `copyAdSets?`, `budgetAdjustment?`        |
-| `cloneAdSet`            | Clone an ad set into a target campaign.                            | `sourceAdSetId`, `targetCampaignId`, `newName?`                          |
-| `bulkPauseCampaigns`    | Pause multiple campaigns in one request, with optional dry run.    | `campaignIds[]`, `dryRun?`                                               |
-| `bulkActivateCampaigns` | Activate multiple campaigns in one request, with optional dry run. | `campaignIds[]`, `dryRun?`                                               |
-| `checkAlerts`           | Flag campaign-level performance issues using thresholds.           | `accountId`, `cprThreshold?`, `minCtr?`, `minDailySpend?`, `datePreset?` |
 
 ## Notes for contributors
 

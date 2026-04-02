@@ -8,9 +8,6 @@ describe('Tool Registry', () => {
     const tools = getAllTools();
     const names = tools.map((t) => t.name);
 
-    // Verify ad creation is not in the public tool surface (pending implementation).
-    expect(names).not.toContain('createAd');
-
     // Verify the core tools are present.
     expect(names).toContain('discoverAdAccounts');
     expect(names).toContain('getCampaigns');
@@ -19,6 +16,16 @@ describe('Tool Registry', () => {
     expect(names).toContain('compareTwoPeriods');
     expect(names).toContain('cloneCampaign');
     expect(names).toContain('cloneAdSet');
+
+    // Phase 3A tools are present.
+    expect(names).toContain('updateAd');
+    expect(names).toContain('getAccountInfo');
+    expect(names).toContain('getCampaignDetails');
+    expect(names).toContain('getAdSetDetails');
+    expect(names).toContain('getAdDetails');
+    expect(names).toContain('createBudgetSchedule');
+    expect(names).toContain('searchInterests');
+    expect(names).toContain('getAdCreatives');
   });
 
   it('clone tool schemas do not include copyAds', () => {
