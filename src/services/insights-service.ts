@@ -26,7 +26,7 @@ interface CampaignSimilarityProfile {
 }
 
 export interface FormattedMetrics {
-  spend: number; // Already in cents from API
+  spend: number; // In dollars (Meta API returns dollars directly)
   results: number; // Sum of all actions
   cpr: number; // Cost per result
   impressions: number;

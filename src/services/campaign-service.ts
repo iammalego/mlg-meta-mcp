@@ -416,17 +416,17 @@ export class CampaignService {
    * Check campaigns for performance alerts
    *
    * @param accountId - Account to check
-   * @param cprThreshold - CPR threshold in cents
+   * @param cprThreshold - CPR threshold in dollars
    * @param minCtr - Minimum CTR percentage
-   * @param minDailySpend - Minimum daily spend in cents
+   * @param minDailySpend - Minimum daily spend in dollars
    * @param datePreset - Time period to analyze
    * @returns Alert summary
    */
   async checkAlerts(
     accountId: string,
-    cprThreshold: number = 5000,
+    cprThreshold: number = 50,
     minCtr: number = 1.0,
-    minDailySpend: number = 1000,
+    minDailySpend: number = 10,
     datePreset: string = 'yesterday'
   ): Promise<{
     campaignsChecked: number;
@@ -471,7 +471,7 @@ export class CampaignService {
               alertType: 'high_cpr',
               value: insights.cpr,
               threshold: cprThreshold,
-              message: `CPR $${(insights.cpr / 100).toFixed(2)} exceeds threshold $${(cprThreshold / 100).toFixed(2)}`,
+              message: `CPR $${insights.cpr.toFixed(2)} exceeds threshold $${cprThreshold.toFixed(2)}`,
             });
           }
 
@@ -495,7 +495,7 @@ export class CampaignService {
               alertType: 'low_spend',
               value: insights.spend,
               threshold: minDailySpend,
-              message: `Spend $${(insights.spend / 100).toFixed(2)} below minimum $${(minDailySpend / 100).toFixed(2)}`,
+              message: `Spend $${insights.spend.toFixed(2)} below minimum $${minDailySpend.toFixed(2)}`,
             });
           }
         }

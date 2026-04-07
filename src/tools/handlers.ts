@@ -650,8 +650,8 @@ async function handleGetInsights(
   // Account level: aggregate into a single summary.
   const metrics = await insightsService!.getMetrics(objectId, level, datePreset, timeRange);
 
-  const spendFormatted = `$${(metrics.spend / 100).toFixed(2)}`;
-  const cprFormatted = metrics.cpr > 0 ? `$${(metrics.cpr / 100).toFixed(2)}` : 'N/A';
+  const spendFormatted = `$${metrics.spend.toFixed(2)}`;
+  const cprFormatted = metrics.cpr > 0 ? `$${metrics.cpr.toFixed(2)}` : 'N/A';
 
   return {
     content: [
@@ -720,7 +720,7 @@ function buildItemizedInsightsStructuredContent(
 }
 
 function formatCurrency(value: number): string {
-  return `$${(value / 100).toFixed(2)}`;
+  return `$${value.toFixed(2)}`;
 }
 
 function formatMetricNumber(value: number): string {
@@ -1059,9 +1059,9 @@ async function handleCheckAlerts(
   args: Record<string, unknown> | undefined
 ): Promise<CallToolResult> {
   const accountId = args?.accountId as string;
-  const cprThreshold = (args?.cprThreshold as number) || 5000;
+  const cprThreshold = (args?.cprThreshold as number) || 50;
   const minCtr = (args?.minCtr as number) || 1.0;
-  const minDailySpend = (args?.minDailySpend as number) || 1000;
+  const minDailySpend = (args?.minDailySpend as number) || 10;
   const datePreset = (args?.datePreset as string) || 'yesterday';
 
   if (!accountId) {
@@ -1085,9 +1085,9 @@ async function handleCheckAlerts(
             `Performance Check: No alerts\n\n` +
             `Campaigns checked: ${result.campaignsChecked}\n\n` +
             `All campaigns are performing within thresholds:\n` +
-            `- CPR below $${(cprThreshold / 100).toFixed(2)}\n` +
+            `- CPR below $${cprThreshold.toFixed(2)}\n` +
             `- CTR above ${minCtr}%\n` +
-            `- Spend above $${(minDailySpend / 100).toFixed(2)}`,
+            `- Spend above $${minDailySpend.toFixed(2)}`,
         },
       ],
     };
@@ -1096,17 +1096,17 @@ async function handleCheckAlerts(
   const alertLines = result.alerts.map((a) => {
     const value =
       a.alertType === 'high_cpr'
-        ? `$${(a.value / 100).toFixed(2)}`
+        ? `$${a.value.toFixed(2)}`
         : a.alertType === 'low_ctr'
           ? `${a.value.toFixed(2)}%`
-          : `$${(a.value / 100).toFixed(2)}`;
+          : `$${a.value.toFixed(2)}`;
 
     const threshold =
       a.alertType === 'high_cpr'
-        ? `$${(a.threshold / 100).toFixed(2)}`
+        ? `$${a.threshold.toFixed(2)}`
         : a.alertType === 'low_ctr'
           ? `${a.threshold}%`
-          : `$${(a.threshold / 100).toFixed(2)}`;
+          : `$${a.threshold.toFixed(2)}`;
 
     return `- ${a.campaignName}\n  Issue: ${a.message}\n  Value: ${value} | Threshold: ${threshold}`;
   });

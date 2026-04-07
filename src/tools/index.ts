@@ -335,10 +335,8 @@ const toolRegistry = {
       cprThreshold: z
         .number()
         .optional()
-        .default(5000)
-        .describe(
-          'Alert if CPR (cost per result) exceeds this value in cents. Default: 5000 ($50.00)'
-        ),
+        .default(50)
+        .describe('Alert if CPR (cost per result) exceeds this value in dollars. Default: 50 ($50.00)'),
       minCtr: z
         .number()
         .optional()
@@ -347,8 +345,8 @@ const toolRegistry = {
       minDailySpend: z
         .number()
         .optional()
-        .default(1000)
-        .describe('Alert if daily spend is below this value in cents. Default: 1000 ($10.00)'),
+        .default(10)
+        .describe('Alert if daily spend is below this value in dollars. Default: 10 ($10.00)'),
       datePreset: z
         .enum(['today', 'yesterday', 'last_7d'])
         .optional()
