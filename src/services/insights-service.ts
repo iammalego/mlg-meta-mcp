@@ -17,6 +17,35 @@ import { getLogger } from '../utils/logger.js';
 
 const logger = getLogger();
 
+/**
+ * Action types que representan resultados de conversión reales, ordenados por
+ * prioridad. Meta Ads Manager usa estos mismos tipos como "Results" según el
+ * objetivo de la campaña. Cualquier action type que NO esté en esta lista
+ * (video_view, post_engagement, link_click, etc.) NO cuenta como "resultado".
+ *
+ * Si ningún tipo de esta lista aparece en costPerActionType del insight,
+ * results = 0 para ese insight (la campaña no tiene objetivo de conversión).
+ */
+const RESULT_ACTION_PRIORITY: string[] = [
+  // Messaging campaigns (most common for Patagon IT clients)
+  'onsite_conversion.messaging_conversation_started_7d',
+  // Lead generation
+  'lead',
+  'onsite_conversion.lead_grouped',
+  'onsite_conversion.lead',
+  'onsite_web_lead',
+  // Commerce / purchases
+  'purchase',
+  'omni_purchase',
+  'offsite_conversion.fb_pixel_purchase',
+  // Registration
+  'complete_registration',
+  'offsite_conversion.fb_pixel_complete_registration',
+  // Add to cart (ecommerce secondary)
+  'add_to_cart',
+  'offsite_conversion.fb_pixel_add_to_cart',
+];
+
 interface CampaignSimilarityProfile {
   objective: string;
   dominantOptimizationGoal?: string;
@@ -581,13 +610,15 @@ export class InsightsService {
   }
 
   /**
-   * Calculate total results from actions, using the primary conversion event as the filter.
+   * Calculate total results from actions, using a conversion-priority lookup.
    *
-   * When costPerActionType is present, its first entry identifies the campaign's primary
-   * goal (e.g. purchase, lead). Only those actions are counted to avoid inflating results
-   * with unrelated types like video views or page engagement.
+   * Resolution order:
+   * 1. Explicit resultDefinition (from compareTwoPeriods)
+   * 2. First RESULT_ACTION_PRIORITY match found in costPerActionType
+   * 3. Returns 0 — the campaign has no conversion objective (e.g. reach, video views)
    *
-   * Falls back to summing all actions when no primary conversion type is available.
+   * This prevents non-conversion action types (video_view, post_engagement, link_click)
+   * from being counted as "results".
    */
   private calculateResults(
     insight: MetaInsights,
@@ -597,8 +628,15 @@ export class InsightsService {
       return 0;
     }
 
-    const primaryActionType =
-      resultDefinition?.resolvedActionType ?? insight.costPerActionType?.[0]?.actionType;
+    // 1. Explicit override from comparison flows
+    if (resultDefinition?.resolvedActionType) {
+      return insight.actions
+        .filter((a) => a.actionType === resultDefinition.resolvedActionType)
+        .reduce((sum, a) => sum + (Number(a.value) || 0), 0);
+    }
+
+    // 2. Priority-based lookup: find the first conversion action type present
+    const primaryActionType = this.findPriorityActionType(insight);
 
     if (primaryActionType) {
       return insight.actions
@@ -606,7 +644,28 @@ export class InsightsService {
         .reduce((sum, a) => sum + (Number(a.value) || 0), 0);
     }
 
-    return insight.actions.reduce((sum, action) => sum + (Number(action.value) || 0), 0);
+    // 3. No conversion action found — campaign has no result objective
+    return 0;
+  }
+
+  /**
+   * Find the highest-priority conversion action type present in the insight's
+   * costPerActionType array. Returns null if the insight has no conversion actions.
+   */
+  private findPriorityActionType(insight: MetaInsights): string | null {
+    if (!insight.costPerActionType || insight.costPerActionType.length === 0) {
+      return null;
+    }
+
+    const availableTypes = new Set(insight.costPerActionType.map((c) => c.actionType));
+
+    for (const priorityType of RESULT_ACTION_PRIORITY) {
+      if (availableTypes.has(priorityType)) {
+        return priorityType;
+      }
+    }
+
+    return null;
   }
 
   private buildPeriodComparison(
@@ -731,10 +790,9 @@ export class InsightsService {
 
   private getPrimaryActionType(insights: MetaInsights[]): string | null {
     for (const insight of insights) {
-      const primaryActionType = insight.costPerActionType?.[0]?.actionType;
-
-      if (primaryActionType) {
-        return primaryActionType;
+      const found = this.findPriorityActionType(insight);
+      if (found) {
+        return found;
       }
     }
 
