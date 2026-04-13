@@ -6,7 +6,14 @@
  */
 
 import { MetaApiClient } from './base-client.js';
-import type { MetaCampaign, MetaAdSet, MetaAd, MetaAdDetail } from '../types/index.js';
+import type {
+  MetaCampaign,
+  MetaAdSet,
+  MetaAd,
+  MetaAdDetail,
+  MetaBillingInfo,
+  MetaFundingSourceDetails,
+} from '../types/index.js';
 import { getLogger } from '../utils/logger.js';
 
 const logger = getLogger();
@@ -525,6 +532,90 @@ export class GraphClient extends MetaApiClient {
       timezoneId: response.timezone_id,
       accountStatus: response.account_status,
       business: response.business,
+    };
+  }
+
+  /**
+   * Get billing and financial info for an ad account
+   *
+   * Endpoint: GET /{account-id}
+   */
+  async getBillingInfo(accountId: string): Promise<MetaBillingInfo> {
+    const fields = [
+      'id',
+      'name',
+      'currency',
+      'account_status',
+      'balance',
+      'amount_spent',
+      'spend_cap',
+      'min_daily_budget',
+      'is_prepay_account',
+      'funding_source',
+      'funding_source_details',
+      'tax_id',
+      'tax_id_status',
+    ].join(',');
+
+    const response = await this.get<{
+      id: string;
+      name: string;
+      currency: string;
+      account_status: number;
+      balance: string;
+      amount_spent: string;
+      spend_cap: string;
+      min_daily_budget: number;
+      is_prepay_account: boolean;
+      funding_source?: string;
+      funding_source_details?: {
+        id: string;
+        type: number;
+        display_string?: string;
+        coupon?: {
+          coupon_id: string;
+          amount: string;
+          currency: string;
+          display_amount: string;
+          expiration?: string;
+        };
+      };
+      tax_id?: string;
+      tax_id_status?: number;
+    }>(accountId, { fields });
+
+    const fundingDetails: MetaFundingSourceDetails | undefined =
+      response.funding_source_details
+        ? {
+            id: response.funding_source_details.id,
+            type: response.funding_source_details.type,
+            displayString: response.funding_source_details.display_string,
+            coupon: response.funding_source_details.coupon
+              ? {
+                  couponId: response.funding_source_details.coupon.coupon_id,
+                  amount: response.funding_source_details.coupon.amount,
+                  currency: response.funding_source_details.coupon.currency,
+                  displayAmount: response.funding_source_details.coupon.display_amount,
+                  expiration: response.funding_source_details.coupon.expiration,
+                }
+              : undefined,
+          }
+        : undefined;
+
+    return {
+      id: response.id,
+      name: response.name,
+      currency: response.currency,
+      accountStatus: response.account_status,
+      balance: response.balance,
+      amountSpent: response.amount_spent,
+      spendCap: response.spend_cap,
+      minDailyBudget: response.min_daily_budget,
+      isPrepayAccount: response.is_prepay_account,
+      fundingSource: response.funding_source,
+      fundingSourceDetails: fundingDetails,
+      taxId: response.tax_id,
+      taxIdStatus: response.tax_id_status,
     };
   }
 

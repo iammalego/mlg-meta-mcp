@@ -185,6 +185,10 @@ export async function handleToolCall(
       case 'compareTwoPeriods':
         return await handleCompareTwoPeriods(parsedArgs);
 
+      // Billing
+      case 'getBillingInfo':
+        return await handleGetBillingInfo(parsedArgs);
+
       // Detail Getters
       case 'getAccountInfo':
         return await handleGetAccountInfo(parsedArgs);
@@ -1125,6 +1129,24 @@ async function handleCheckAlerts(
 }
 
 // ==================== DETAIL GETTER HANDLERS ====================
+
+async function handleGetBillingInfo(
+  args: Record<string, unknown> | undefined
+): Promise<CallToolResult> {
+  const accountId = args?.accountId as string;
+  const resolvedId = await accountService!.resolveAccount(accountId);
+  const result = await graphClient!.getBillingInfo(resolvedId);
+
+  return {
+    structuredContent: result as unknown as Record<string, unknown>,
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
 
 async function handleGetAccountInfo(
   args: Record<string, unknown> | undefined

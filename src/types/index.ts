@@ -96,6 +96,35 @@ export interface MetaCreative {
   callToAction?: { type: string };
 }
 
+export interface MetaFundingSourceDetails {
+  id: string;
+  type: number;
+  displayString?: string;
+  coupon?: {
+    couponId: string;
+    amount: string;
+    currency: string;
+    displayAmount: string;
+    expiration?: string;
+  };
+}
+
+export interface MetaBillingInfo {
+  id: string;
+  name: string;
+  currency: string;
+  accountStatus: number;
+  balance: string;
+  amountSpent: string;
+  spendCap: string;
+  minDailyBudget: number;
+  isPrepayAccount: boolean;
+  fundingSource?: string;
+  fundingSourceDetails?: MetaFundingSourceDetails;
+  taxId?: string;
+  taxIdStatus?: number;
+}
+
 export interface MetaTargetingItem {
   id: string;
   name: string;
