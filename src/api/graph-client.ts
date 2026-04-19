@@ -607,7 +607,7 @@ export class GraphClient extends MetaApiClient {
       name: response.name,
       currency: response.currency,
       accountStatus: response.account_status,
-      balance: response.balance,
+      pendingBalance: response.balance,
       amountSpent: response.amount_spent,
       spendCap: response.spend_cap,
       minDailyBudget: response.min_daily_budget,

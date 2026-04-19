@@ -394,7 +394,7 @@ const toolRegistry = {
   // ==================== GROUP 2: Billing ====================
   getBillingInfo: {
     description:
-      'Get billing and financial information for an ad account including balance, total spend, spend cap, payment method details, and tax info. All monetary values are in the smallest currency unit (e.g. cents for USD).',
+      'Get billing and financial information for an ad account including pending balance (bill amount due), total spend, spend cap, payment method details, and tax info. All monetary values are in the smallest currency unit (e.g. cents for USD).',
     schema: z.object({
       accountId: z.string().describe('Ad account ID (act_XXX) or account name'),
     }),

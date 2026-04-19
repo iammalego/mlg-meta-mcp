@@ -114,7 +114,7 @@ export interface MetaBillingInfo {
   name: string;
   currency: string;
   accountStatus: number;
-  balance: string;
+  pendingBalance: string;
   amountSpent: string;
   spendCap: string;
   minDailyBudget: number;
