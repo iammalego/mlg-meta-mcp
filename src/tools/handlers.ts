@@ -30,6 +30,7 @@ import {
   type CompareTwoPeriodsMetricUnit,
 } from '../utils/compare-two-periods.js';
 import { parseToolArgs } from './index.js';
+import { buildResult } from './result-builder.js';
 
 const logger = getLogger();
 
@@ -249,29 +250,27 @@ export async function handleToolCall(
 async function handleDiscoverAdAccounts(): Promise<CallToolResult> {
   const accounts = await accountService!.discoverAdAccounts();
 
-  if (accounts.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'No accessible ad accounts found. Verify that the System User Token has permissions for the accounts.',
-        },
-      ],
-    };
-  }
-
-  const lines = accounts.map(
-    (acc, i) => `${i + 1}. ${acc.name}\n   ID: ${acc.id} | Business: ${acc.businessName}`
-  );
-
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Available Ad Accounts (${accounts.length}):\n\n${lines.join('\n\n')}`,
-      },
-    ],
+  const data = {
+    count: accounts.length,
+    items: accounts.map((acc) => ({
+      id: acc.id,
+      name: acc.name,
+      businessName: acc.businessName,
+      status: acc.status,
+    })),
   };
+
+  const renderText = (d: typeof data): string => {
+    if (d.count === 0) {
+      return 'No accessible ad accounts found. Verify that the System User Token has permissions for the accounts.';
+    }
+    const lines = d.items.map(
+      (acc, i) => `${i + 1}. ${acc.name}\n   ID: ${acc.id} | Business: ${acc.businessName}`
+    );
+    return `Available Ad Accounts (${d.count}):\n\n${lines.join('\n\n')}`;
+  };
+
+  return buildResult(data, renderText);
 }
 
 // ==================== CAMPAIGN HANDLERS ====================
@@ -288,37 +287,39 @@ async function handleGetCampaigns(
 
   const campaigns = await campaignService!.getCampaigns(accountIdOrName, status);
 
-  if (campaigns.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `No campaigns found ${status !== 'ALL' ? `with status "${status}" ` : ''}in the account.`,
-        },
-      ],
-    };
-  }
-
-  const lines = campaigns.map((camp, i) => {
-    const budget = camp.dailyBudget
-      ? `$${(camp.dailyBudget / 100).toFixed(2)}/day`
-      : camp.lifetimeBudget
-        ? `$${(camp.lifetimeBudget / 100).toFixed(2)} total`
-        : 'No budget';
-
-    return `${i + 1}. ${camp.name}\n   ID: ${camp.id} | Status: ${camp.status} | Objective: ${camp.objective}\n   Budget: ${budget}`;
-  });
-
   const statusFilter = status !== 'ALL' ? ` (${status})` : '';
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Campaigns${statusFilter} found (${campaigns.length}):\n\n${lines.join('\n\n')}`,
-      },
-    ],
+  const data = {
+    count: campaigns.length,
+    filter: { accountId: accountIdOrName, status },
+    items: campaigns.map((camp) => ({
+      id: camp.id,
+      name: camp.name,
+      status: camp.status,
+      effectiveStatus: camp.effectiveStatus,
+      objective: camp.objective,
+      dailyBudgetCents: camp.dailyBudget ?? null,
+      lifetimeBudgetCents: camp.lifetimeBudget ?? null,
+      createdTime: camp.createdTime,
+    })),
   };
+
+  const renderText = (d: typeof data): string => {
+    if (d.count === 0) {
+      return `No campaigns found ${status !== 'ALL' ? `with status "${status}" ` : ''}in the account.`;
+    }
+    const lines = d.items.map((camp, i) => {
+      const budget = camp.dailyBudgetCents != null
+        ? `$${(camp.dailyBudgetCents / 100).toFixed(2)}/day`
+        : camp.lifetimeBudgetCents != null
+          ? `$${(camp.lifetimeBudgetCents / 100).toFixed(2)} total`
+          : 'No budget';
+      return `${i + 1}. ${camp.name}\n   ID: ${camp.id} | Status: ${camp.status} | Objective: ${camp.objective}\n   Budget: ${budget}`;
+    });
+    return `Campaigns${statusFilter} found (${d.count}):\n\n${lines.join('\n\n')}`;
+  };
+
+  return buildResult(data, renderText);
 }
 
 async function handleUpdateCampaign(
@@ -417,37 +418,43 @@ async function handleGetAdSets(args: Record<string, unknown> | undefined): Promi
   const parentId = campaignId || accountId!;
   const adsets = await adSetService!.getAdSets(parentId, status);
 
-  if (adsets.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `No ad sets found ${status !== 'ALL' ? `with status "${status}" ` : ''}`,
-        },
-      ],
-    };
-  }
-
-  const lines = adsets.map((adset, i) => {
-    const budget = adset.dailyBudget
-      ? `$${(adset.dailyBudget / 100).toFixed(2)}/day`
-      : adset.lifetimeBudget
-        ? `$${(adset.lifetimeBudget / 100).toFixed(2)} total`
-        : 'No budget';
-
-    return `${i + 1}. ${adset.name}\n   ID: ${adset.id} | Campaign: ${adset.campaignId}\n   Status: ${adset.status} | Budget: ${budget}`;
-  });
-
   const statusFilter = status !== 'ALL' ? ` (${status})` : '';
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Ad Sets${statusFilter} found (${adsets.length}):\n\n${lines.join('\n\n')}`,
-      },
-    ],
+  const data = {
+    count: adsets.length,
+    filter: { parentId, status },
+    items: adsets.map((adset) => ({
+      id: adset.id,
+      name: adset.name,
+      campaignId: adset.campaignId,
+      status: adset.status,
+      effectiveStatus: adset.effectiveStatus,
+      dailyBudgetCents: adset.dailyBudget ?? null,
+      lifetimeBudgetCents: adset.lifetimeBudget ?? null,
+      startTime: adset.startTime ?? null,
+      endTime: adset.endTime ?? null,
+      optimizationGoal: adset.optimizationGoal ?? null,
+      billingEvent: adset.billingEvent ?? null,
+      bidStrategy: adset.bidStrategy ?? null,
+    })),
   };
+
+  const renderText = (d: typeof data): string => {
+    if (d.count === 0) {
+      return `No ad sets found ${status !== 'ALL' ? `with status "${status}" ` : ''}`;
+    }
+    const lines = d.items.map((adset, i) => {
+      const budget = adset.dailyBudgetCents != null
+        ? `$${(adset.dailyBudgetCents / 100).toFixed(2)}/day`
+        : adset.lifetimeBudgetCents != null
+          ? `$${(adset.lifetimeBudgetCents / 100).toFixed(2)} total`
+          : 'No budget';
+      return `${i + 1}. ${adset.name}\n   ID: ${adset.id} | Campaign: ${adset.campaignId}\n   Status: ${adset.status} | Budget: ${budget}`;
+    });
+    return `Ad Sets${statusFilter} found (${d.count}):\n\n${lines.join('\n\n')}`;
+  };
+
+  return buildResult(data, renderText);
 }
 
 async function handleUpdateAdSet(
@@ -548,32 +555,33 @@ async function handleGetAds(args: Record<string, unknown> | undefined): Promise<
   const parentId = adSetId || campaignId!;
   const ads = await adService!.getAds(parentId, status);
 
-  if (ads.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `No ads found ${status !== 'ALL' ? `with status "${status}" ` : ''}`,
-        },
-      ],
-    };
-  }
-
-  const lines = ads.map((ad, i) => {
-    const creative = ad.creative;
-    return `${i + 1}. ${ad.name}\n   ID: ${ad.id} | AdSet: ${ad.adSetId}\n   Status: ${ad.status}${creative ? `\n   Title: ${creative.title || 'N/A'}` : ''}`;
-  });
-
   const statusFilter = status !== 'ALL' ? ` (${status})` : '';
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Ads${statusFilter} found (${ads.length}):\n\n${lines.join('\n\n')}`,
-      },
-    ],
+  const data = {
+    count: ads.length,
+    filter: { parentId, status },
+    items: ads.map((ad) => ({
+      id: ad.id,
+      name: ad.name,
+      adSetId: ad.adSetId,
+      campaignId: ad.campaignId ?? null,
+      status: ad.status,
+      effectiveStatus: ad.effectiveStatus,
+      creative: ad.creative ?? null,
+    })),
   };
+
+  const renderText = (d: typeof data): string => {
+    if (d.count === 0) {
+      return `No ads found ${status !== 'ALL' ? `with status "${status}" ` : ''}`;
+    }
+    const lines = d.items.map((ad, i) => {
+      return `${i + 1}. ${ad.name}\n   ID: ${ad.id} | AdSet: ${ad.adSetId}\n   Status: ${ad.status}${ad.creative?.title != null ? `\n   Title: ${ad.creative.title}` : ''}`;
+    });
+    return `Ads${statusFilter} found (${d.count}):\n\n${lines.join('\n\n')}`;
+  };
+
+  return buildResult(data, renderText);
 }
 
 // ==================== INSIGHTS HANDLERS ====================

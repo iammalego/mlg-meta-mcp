@@ -1,0 +1,18 @@
+{
+  "count": 12,
+  "filter": { "accountId": "act_SANITIZED", "status": "ALL" },
+  "items": [
+    { "id": "camp_001", "name": "Lead Gen - Spring 2026", "status": "ACTIVE", "effectiveStatus": "ACTIVE", "objective": "LEAD_GENERATION", "dailyBudgetCents": 20000, "lifetimeBudgetCents": null, "createdTime": "2026-01-01T00:00:00Z" },
+    { "id": "camp_002", "name": "Awareness - Brand Q1", "status": "ACTIVE", "effectiveStatus": "LIMITED", "objective": "BRAND_AWARENESS", "dailyBudgetCents": 30000, "lifetimeBudgetCents": null, "createdTime": "2026-01-10T00:00:00Z" },
+    { "id": "camp_003", "name": "Conversion - Retargeting", "status": "ACTIVE", "effectiveStatus": "ACTIVE", "objective": "CONVERSIONS", "dailyBudgetCents": 15000, "lifetimeBudgetCents": null, "createdTime": "2026-02-01T00:00:00Z" },
+    { "id": "camp_004", "name": "Lead Gen - April Push", "status": "ACTIVE", "effectiveStatus": "ACTIVE", "objective": "LEAD_GENERATION", "dailyBudgetCents": 25000, "lifetimeBudgetCents": null, "createdTime": "2026-03-15T00:00:00Z" },
+    { "id": "camp_005", "name": "Traffic - Blog Readers", "status": "ACTIVE", "effectiveStatus": "PENDING_BILLING_INFO", "objective": "LINK_CLICKS", "dailyBudgetCents": 10000, "lifetimeBudgetCents": null, "createdTime": "2026-04-01T00:00:00Z" },
+    { "id": "camp_006", "name": "Awareness - Video Views", "status": "PAUSED", "effectiveStatus": "PAUSED", "objective": "VIDEO_VIEWS", "dailyBudgetCents": null, "lifetimeBudgetCents": 500000, "createdTime": "2025-12-01T00:00:00Z" },
+    { "id": "camp_007", "name": "Engagement - Post Reach", "status": "PAUSED", "effectiveStatus": "PAUSED_REVIEWS", "objective": "POST_ENGAGEMENT", "dailyBudgetCents": 5000, "lifetimeBudgetCents": null, "createdTime": "2026-01-20T00:00:00Z" },
+    { "id": "camp_008", "name": "Lead Gen - Lookalike", "status": "ACTIVE", "effectiveStatus": "ACTIVE", "objective": "LEAD_GENERATION", "dailyBudgetCents": 18000, "lifetimeBudgetCents": null, "createdTime": "2026-02-15T00:00:00Z" },
+    { "id": "camp_009", "name": "Conversion - Purchase", "status": "ACTIVE", "effectiveStatus": "ACTIVE", "objective": "CONVERSIONS", "dailyBudgetCents": 35000, "lifetimeBudgetCents": null, "createdTime": "2026-03-01T00:00:00Z" },
+    { "id": "camp_010", "name": "Traffic - Product Pages", "status": "ACTIVE", "effectiveStatus": "LIMITED", "objective": "LINK_CLICKS", "dailyBudgetCents": 8000, "lifetimeBudgetCents": null, "createdTime": "2026-03-20T00:00:00Z" },
+    { "id": "camp_011", "name": "App Installs - Android", "status": "PAUSED", "effectiveStatus": "PAUSED", "objective": "APP_INSTALLS", "dailyBudgetCents": null, "lifetimeBudgetCents": 300000, "createdTime": "2026-01-05T00:00:00Z" },
+    { "id": "camp_012", "name": "Lead Gen - Summer Preview", "status": "ACTIVE", "effectiveStatus": "ACTIVE", "objective": "LEAD_GENERATION", "dailyBudgetCents": 12000, "lifetimeBudgetCents": null, "createdTime": "2026-04-20T00:00:00Z" }
+  ]
+}

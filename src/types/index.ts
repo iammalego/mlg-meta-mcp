@@ -13,7 +13,10 @@ export interface MetaAdAccount {
 export interface MetaCampaign {
   id: string;
   name: string;
+  /** Configured state — what the user explicitly set (ACTIVE, PAUSED, etc.) */
   status: string;
+  /** Delivery state — what Meta actually reports (effective_status from API) */
+  effectiveStatus: string;
   objective: string;
   accountId?: string;
   dailyBudget?: number;
@@ -25,7 +28,10 @@ export interface MetaAdSet {
   id: string;
   name: string;
   campaignId: string;
+  /** Configured state — what the user explicitly set */
   status: string;
+  /** Delivery state — what Meta actually reports (effective_status from API) */
+  effectiveStatus: string;
   dailyBudget?: number;
   lifetimeBudget?: number;
   targeting?: Record<string, unknown>;
@@ -41,7 +47,10 @@ export interface MetaAd {
   name: string;
   adSetId: string;
   campaignId?: string;
+  /** Configured state — what the user explicitly set */
   status: string;
+  /** Delivery state — what Meta actually reports (effective_status from API) */
+  effectiveStatus: string;
   creative?: {
     title?: string;
     body?: string;

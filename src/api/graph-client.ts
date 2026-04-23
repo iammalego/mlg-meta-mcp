@@ -137,20 +137,31 @@ export class GraphClient extends MetaApiClient {
     };
 
     if (status !== 'ALL') {
-      params.effective_status = JSON.stringify([status]);
+      const filterStatuses =
+        status === 'ACTIVE'
+          ? ['ACTIVE', 'LIMITED', 'PENDING_BILLING_INFO']
+          : [status];
+      params.effective_status = JSON.stringify(filterStatuses);
     }
 
     const response = await this.get<CampaignsResponse>(`${accountId}/campaigns`, params);
 
-    return response.data.map((campaign) => ({
-      id: campaign.id,
-      name: campaign.name,
-      status: campaign.effective_status || campaign.status,
-      objective: campaign.objective,
-      dailyBudget: campaign.daily_budget ? parseInt(campaign.daily_budget, 10) : undefined,
-      lifetimeBudget: campaign.lifetime_budget ? parseInt(campaign.lifetime_budget, 10) : undefined,
-      createdTime: campaign.created_time,
-    }));
+    return response.data.map((campaign) => {
+      const effectiveStatus = campaign.effective_status ?? campaign.status;
+      if (!campaign.effective_status) {
+        logger.debug({ campaignId: campaign.id }, 'effective_status absent in API response; falling back to status');
+      }
+      return {
+        id: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        effectiveStatus,
+        objective: campaign.objective,
+        dailyBudget: campaign.daily_budget ? parseInt(campaign.daily_budget, 10) : undefined,
+        lifetimeBudget: campaign.lifetime_budget ? parseInt(campaign.lifetime_budget, 10) : undefined,
+        createdTime: campaign.created_time,
+      };
+    });
   }
 
   /**
@@ -174,24 +185,23 @@ export class GraphClient extends MetaApiClient {
 
     const response = await this.get<CampaignResponse>(campaignId, { fields });
 
+    const r = response as CampaignResponse & {
+      effective_status?: string;
+      daily_budget?: string;
+      lifetime_budget?: string;
+      created_time?: string;
+      account_id?: string;
+    };
     return {
-      id: response.id,
-      name: response.name,
-      status:
-        (response as CampaignResponse & { effective_status?: string }).effective_status ||
-        response.status,
-      objective: response.objective,
-      dailyBudget: (response as CampaignResponse & { daily_budget?: string }).daily_budget
-        ? parseInt((response as CampaignResponse & { daily_budget?: string }).daily_budget!, 10)
-        : undefined,
-      lifetimeBudget: (response as CampaignResponse & { lifetime_budget?: string }).lifetime_budget
-        ? parseInt(
-            (response as CampaignResponse & { lifetime_budget?: string }).lifetime_budget!,
-            10
-          )
-        : undefined,
-      createdTime: (response as CampaignResponse & { created_time?: string }).created_time || '',
-      accountId: (response as CampaignResponse & { account_id?: string }).account_id,
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      effectiveStatus: r.effective_status ?? r.status,
+      objective: r.objective,
+      dailyBudget: r.daily_budget ? parseInt(r.daily_budget, 10) : undefined,
+      lifetimeBudget: r.lifetime_budget ? parseInt(r.lifetime_budget, 10) : undefined,
+      createdTime: r.created_time || '',
+      accountId: r.account_id,
     };
   }
 
@@ -308,25 +318,36 @@ export class GraphClient extends MetaApiClient {
     };
 
     if (status !== 'ALL') {
-      params.effective_status = JSON.stringify([status]);
+      const filterStatuses =
+        status === 'ACTIVE'
+          ? ['ACTIVE', 'LIMITED', 'PENDING_BILLING_INFO']
+          : [status];
+      params.effective_status = JSON.stringify(filterStatuses);
     }
 
     const response = await this.get<AdSetsResponse>(`${parentId}/adsets`, params);
 
-    return response.data.map((adset) => ({
-      id: adset.id,
-      name: adset.name,
-      campaignId: adset.campaign_id,
-      status: adset.effective_status || adset.status,
-      dailyBudget: adset.daily_budget ? parseInt(adset.daily_budget, 10) : undefined,
-      lifetimeBudget: adset.lifetime_budget ? parseInt(adset.lifetime_budget, 10) : undefined,
-      targeting: adset.targeting,
-      bidStrategy: adset.bid_strategy,
-      billingEvent: adset.billing_event,
-      optimizationGoal: adset.optimization_goal,
-      startTime: adset.start_time,
-      endTime: adset.end_time,
-    }));
+    return response.data.map((adset) => {
+      const effectiveStatus = adset.effective_status ?? adset.status;
+      if (!adset.effective_status) {
+        logger.debug({ adSetId: adset.id }, 'effective_status absent in API response; falling back to status');
+      }
+      return {
+        id: adset.id,
+        name: adset.name,
+        campaignId: adset.campaign_id,
+        status: adset.status,
+        effectiveStatus,
+        dailyBudget: adset.daily_budget ? parseInt(adset.daily_budget, 10) : undefined,
+        lifetimeBudget: adset.lifetime_budget ? parseInt(adset.lifetime_budget, 10) : undefined,
+        targeting: adset.targeting,
+        bidStrategy: adset.bid_strategy,
+        billingEvent: adset.billing_event,
+        optimizationGoal: adset.optimization_goal,
+        startTime: adset.start_time,
+        endTime: adset.end_time,
+      };
+    });
   }
 
   /**
@@ -356,7 +377,8 @@ export class GraphClient extends MetaApiClient {
       id: data.id,
       name: data.name,
       campaignId: data.campaign_id,
-      status: data.effective_status || data.status,
+      status: data.status,
+      effectiveStatus: data.effective_status ?? data.status,
       dailyBudget: data.daily_budget ? parseInt(data.daily_budget, 10) : undefined,
       lifetimeBudget: data.lifetime_budget ? parseInt(data.lifetime_budget, 10) : undefined,
       targeting: data.targeting,
@@ -471,20 +493,29 @@ export class GraphClient extends MetaApiClient {
     };
 
     if (status !== 'ALL') {
-      params.effective_status = JSON.stringify([status]);
+      const filterStatuses =
+        status === 'ACTIVE'
+          ? ['ACTIVE', 'LIMITED', 'PENDING_BILLING_INFO']
+          : [status];
+      params.effective_status = JSON.stringify(filterStatuses);
     }
 
     const response = await this.get<AdsResponse>(`${parentId}/ads`, params);
 
     return response.data.map((ad) => {
       const creative = ad.creative?.object_story_spec?.link_data;
+      const effectiveStatus = ad.effective_status ?? ad.status;
+      if (!ad.effective_status) {
+        logger.debug({ adId: ad.id }, 'effective_status absent in API response; falling back to status');
+      }
 
       return {
         id: ad.id,
         name: ad.name,
         adSetId: ad.adset_id,
         campaignId: ad.campaign_id,
-        status: ad.effective_status || ad.status,
+        status: ad.status,
+        effectiveStatus,
         creative: creative
           ? {
               title: creative.name,
@@ -671,7 +702,8 @@ export class GraphClient extends MetaApiClient {
     return {
       id: response.id,
       name: response.name,
-      status: response.effective_status || response.status,
+      status: response.status,
+      effectiveStatus: response.effective_status ?? response.status,
       objective: response.objective,
       dailyBudget: response.daily_budget ? parseInt(response.daily_budget, 10) : undefined,
       lifetimeBudget: response.lifetime_budget ? parseInt(response.lifetime_budget, 10) : undefined,
@@ -733,7 +765,8 @@ export class GraphClient extends MetaApiClient {
       id: response.id,
       name: response.name,
       campaignId: response.campaign_id,
-      status: response.effective_status || response.status,
+      status: response.status,
+      effectiveStatus: response.effective_status ?? response.status,
       dailyBudget: response.daily_budget ? parseInt(response.daily_budget, 10) : undefined,
       lifetimeBudget: response.lifetime_budget ? parseInt(response.lifetime_budget, 10) : undefined,
       targeting: response.targeting,
@@ -741,7 +774,6 @@ export class GraphClient extends MetaApiClient {
       billingEvent: response.billing_event,
       optimizationGoal: response.optimization_goal,
       bidAmount: response.bid_amount,
-      effectiveStatus: response.effective_status,
       issuesInfo: response.issues_info,
     };
   }
