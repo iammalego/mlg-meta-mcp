@@ -411,3 +411,69 @@ describe('handleToolCall getAds — structured payload (P3.7)', () => {
     expect(sc.items).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1.x — _meta.errorCategory on error results
+// ---------------------------------------------------------------------------
+describe('handleToolCall — _meta.errorCategory on isError results (P1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+    mockAccountService.resolveAccount.mockResolvedValue('act_123');
+  });
+
+  it('P1.1 Zod validation rejection → _meta.errorCategory: validation', async () => {
+    // Pass a clearly invalid arg that will fail Zod schema (status: 'running' is not valid)
+    const result = await handleToolCall('getCampaigns', { accountId: 'act_123', status: 'running' });
+
+    expect(result.isError).toBe(true);
+    const meta = result._meta as { errorCategory?: string } | undefined;
+    expect(meta).toBeDefined();
+    expect(meta?.errorCategory).toBe('validation');
+  });
+
+  it('P1.4a MetaMcpError VALIDATION category → errorCategory: validation', async () => {
+    const { MetaMcpError, ErrorCategory } = await import('../utils/errors.js');
+    mockCampaignService.getCampaigns.mockRejectedValue(
+      new MetaMcpError(ErrorCategory.VALIDATION, 'test validation error')
+    );
+    const result = await handleToolCall('getCampaigns', { accountId: 'act_123' });
+
+    expect(result.isError).toBe(true);
+    const meta = result._meta as { errorCategory?: string } | undefined;
+    expect(meta?.errorCategory).toBe('validation');
+  });
+
+  it('P1.4b MetaMcpError NETWORK category → errorCategory: transport', async () => {
+    const { MetaMcpError, ErrorCategory } = await import('../utils/errors.js');
+    mockCampaignService.getCampaigns.mockRejectedValue(
+      new MetaMcpError(ErrorCategory.NETWORK, 'test network error')
+    );
+    const result = await handleToolCall('getCampaigns', { accountId: 'act_123' });
+
+    expect(result.isError).toBe(true);
+    const meta = result._meta as { errorCategory?: string } | undefined;
+    expect(meta?.errorCategory).toBe('transport');
+  });
+
+  it('P1.4c MetaMcpError RATE_LIMIT category → errorCategory: graph_api', async () => {
+    const { MetaMcpError, ErrorCategory } = await import('../utils/errors.js');
+    mockCampaignService.getCampaigns.mockRejectedValue(
+      new MetaMcpError(ErrorCategory.RATE_LIMIT, 'rate limited')
+    );
+    const result = await handleToolCall('getCampaigns', { accountId: 'act_123' });
+
+    expect(result.isError).toBe(true);
+    const meta = result._meta as { errorCategory?: string } | undefined;
+    expect(meta?.errorCategory).toBe('graph_api');
+  });
+
+  it('P1.4d plain Error (non-MetaMcpError) → errorCategory: unknown', async () => {
+    mockCampaignService.getCampaigns.mockRejectedValue(new Error('something unexpected'));
+    const result = await handleToolCall('getCampaigns', { accountId: 'act_123' });
+
+    expect(result.isError).toBe(true);
+    const meta = result._meta as { errorCategory?: string } | undefined;
+    expect(meta?.errorCategory).toBe('unknown');
+  });
+});

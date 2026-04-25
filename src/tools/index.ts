@@ -24,6 +24,7 @@ const datePresetSchema = z.enum([
   'last_30d',
   'this_month',
   'last_month',
+  'maximum',
 ]);
 const timeRangeSchema = z.object({
   since: z.string().describe('Start date (YYYY-MM-DD)'),

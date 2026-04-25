@@ -56,3 +56,29 @@ describe('Tool Registry', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// P3.1 / P3.2 — datePresetSchema accepts 'maximum'
+// ---------------------------------------------------------------------------
+describe('datePresetSchema — maximum preset (P3.1/P3.2)', () => {
+  it('P3.1 RED: datePreset "maximum" is accepted by getInsights schema', () => {
+    // Should NOT throw — 'maximum' must be a valid datePreset value
+    expect(() =>
+      parseToolArgs('getInsights', { objectId: 'act_123', level: 'account', datePreset: 'maximum' })
+    ).not.toThrow();
+  });
+
+  it('P3.1 garbage value still rejected', () => {
+    expect(() =>
+      parseToolArgs('getInsights', { objectId: 'act_123', level: 'account', datePreset: 'garbage' })
+    ).toThrow(MetaMcpError);
+  });
+
+  it('P3.3 JSON Schema manifest includes maximum in datePreset enum', () => {
+    const tools = getAllTools();
+    const getInsights = tools.find((t) => t.name === 'getInsights');
+    const props = (getInsights?.inputSchema as { properties?: Record<string, unknown> })?.properties ?? {};
+    const datePresetProp = props['datePreset'] as { enum?: string[] } | undefined;
+    expect(datePresetProp?.enum).toContain('maximum');
+  });
+});

@@ -908,3 +908,108 @@ describe('handleToolCall getAdCreatives', () => {
     expect(result.isError).toBeFalsy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// P2 — Dual-status text rendering
+// ---------------------------------------------------------------------------
+
+describe('handleToolCall getCampaigns — dual-status text (P2.1/P2.2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+    mockAccountService.resolveAccount.mockResolvedValue('act_123');
+  });
+
+  const makeCampaign = (overrides = {}) => ({
+    id: 'camp_1',
+    name: 'Campaign 1',
+    status: 'ACTIVE',
+    effectiveStatus: 'ACTIVE',
+    objective: 'LINK_CLICKS',
+    dailyBudget: 50000,
+    lifetimeBudget: undefined,
+    createdTime: '2026-01-01T00:00:00Z',
+    ...overrides,
+  });
+
+  it('P2.1a equal status+effectiveStatus → shows "Status: ACTIVE" (no parenthetical)', async () => {
+    mockCampaignService.getCampaigns.mockResolvedValue([makeCampaign({ status: 'ACTIVE', effectiveStatus: 'ACTIVE' })]);
+    const result = await handleToolCall('getCampaigns', { accountId: 'act_123' });
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('Status: ACTIVE');
+    expect(text).not.toContain('configured:');
+  });
+
+  it('P2.1b differing status+effectiveStatus → shows "Status: PAUSED_REVIEWS (configured: ACTIVE)"', async () => {
+    mockCampaignService.getCampaigns.mockResolvedValue([makeCampaign({ status: 'ACTIVE', effectiveStatus: 'PAUSED_REVIEWS' })]);
+    const result = await handleToolCall('getCampaigns', { accountId: 'act_123' });
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('Status: PAUSED_REVIEWS (configured: ACTIVE)');
+  });
+});
+
+describe('handleToolCall getAdSets — dual-status text (P2.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  const makeAdSet = (overrides = {}) => ({
+    id: 'adset_1',
+    name: 'AdSet 1',
+    campaignId: 'camp_1',
+    status: 'ACTIVE',
+    effectiveStatus: 'ACTIVE',
+    dailyBudget: 10000,
+    lifetimeBudget: undefined,
+    ...overrides,
+  });
+
+  it('P2.3a equal status+effectiveStatus → shows "Status: ACTIVE" (no parenthetical)', async () => {
+    mockAdSetService.getAdSets.mockResolvedValue([makeAdSet({ status: 'ACTIVE', effectiveStatus: 'ACTIVE' })]);
+    const result = await handleToolCall('getAdSets', { accountId: 'act_1' });
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('Status: ACTIVE');
+    expect(text).not.toContain('configured:');
+  });
+
+  it('P2.3b differing status+effectiveStatus → shows "Status: LIMITED (configured: ACTIVE)"', async () => {
+    mockAdSetService.getAdSets.mockResolvedValue([makeAdSet({ status: 'ACTIVE', effectiveStatus: 'LIMITED' })]);
+    const result = await handleToolCall('getAdSets', { accountId: 'act_1' });
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('Status: LIMITED (configured: ACTIVE)');
+  });
+});
+
+describe('handleToolCall getAds — dual-status text (P2.4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initializeHandlers('token');
+  });
+
+  const makeAd = (overrides = {}) => ({
+    id: 'ad_1',
+    name: 'Ad 1',
+    adSetId: 'adset_1',
+    campaignId: 'camp_1',
+    status: 'ACTIVE',
+    effectiveStatus: 'ACTIVE',
+    creative: { title: 'Great offer', body: 'Click now', linkUrl: 'https://example.com', callToAction: 'LEARN_MORE' },
+    ...overrides,
+  });
+
+  it('P2.4a equal status+effectiveStatus → shows "Status: ACTIVE" (no parenthetical)', async () => {
+    mockAdService.getAds.mockResolvedValue([makeAd({ status: 'ACTIVE', effectiveStatus: 'ACTIVE' })]);
+    const result = await handleToolCall('getAds', { adSetId: 'adset_1' });
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('Status: ACTIVE');
+    expect(text).not.toContain('configured:');
+  });
+
+  it('P2.4b differing status+effectiveStatus → shows "Status: WITH_ISSUES (configured: ACTIVE)"', async () => {
+    mockAdService.getAds.mockResolvedValue([makeAd({ status: 'ACTIVE', effectiveStatus: 'WITH_ISSUES' })]);
+    const result = await handleToolCall('getAds', { adSetId: 'adset_1' });
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('Status: WITH_ISSUES (configured: ACTIVE)');
+  });
+});

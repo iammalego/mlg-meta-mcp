@@ -13,6 +13,27 @@ export enum ErrorCategory {
   UNKNOWN = '[UNKNOWN]',
 }
 
+export type ErrorCategoryMeta = 'validation' | 'transport' | 'graph_api' | 'unknown';
+
+/**
+ * Maps ErrorCategory enum values to the lowercase meta string expected by the LLM API contract.
+ */
+export function errorCategoryToMetaString(cat: ErrorCategory): ErrorCategoryMeta {
+  switch (cat) {
+    case ErrorCategory.VALIDATION:
+      return 'validation';
+    case ErrorCategory.NETWORK:
+      return 'transport';
+    case ErrorCategory.RATE_LIMIT:
+    case ErrorCategory.AUTH:
+    case ErrorCategory.NOT_FOUND:
+      return 'graph_api';
+    case ErrorCategory.UNKNOWN:
+    default:
+      return 'unknown';
+  }
+}
+
 export class MetaMcpError extends Error {
   constructor(
     public category: ErrorCategory,

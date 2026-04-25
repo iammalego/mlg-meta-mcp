@@ -13,7 +13,7 @@ import { InsightsService } from '../services/insights-service.js';
 import { GraphClient } from '../api/graph-client.js';
 import { TargetingClient, CreativeClient } from '../api/client.js';
 import { getLogger } from '../utils/logger.js';
-import { MetaMcpError, ErrorCategory } from '../utils/errors.js';
+import { MetaMcpError, ErrorCategory, errorCategoryToMetaString } from '../utils/errors.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type {
   CompareTwoPeriodsOptions,
@@ -233,6 +233,10 @@ export async function handleToolCall(
     const errorMessage =
       error instanceof MetaMcpError ? error.message : `Error: ${(error as Error).message}`;
 
+    const errorCategory = error instanceof MetaMcpError
+      ? errorCategoryToMetaString(error.category)
+      : 'unknown';
+
     return {
       content: [
         {
@@ -241,6 +245,7 @@ export async function handleToolCall(
         },
       ],
       isError: true,
+      _meta: { errorCategory },
     };
   }
 }
@@ -314,7 +319,10 @@ async function handleGetCampaigns(
         : camp.lifetimeBudgetCents != null
           ? `$${(camp.lifetimeBudgetCents / 100).toFixed(2)} total`
           : 'No budget';
-      return `${i + 1}. ${camp.name}\n   ID: ${camp.id} | Status: ${camp.status} | Objective: ${camp.objective}\n   Budget: ${budget}`;
+      const statusText = camp.effectiveStatus !== camp.status
+        ? `${camp.effectiveStatus} (configured: ${camp.status})`
+        : camp.effectiveStatus ?? camp.status;
+      return `${i + 1}. ${camp.name}\n   ID: ${camp.id} | Status: ${statusText} | Objective: ${camp.objective}\n   Budget: ${budget}`;
     });
     return `Campaigns${statusFilter} found (${d.count}):\n\n${lines.join('\n\n')}`;
   };
@@ -449,7 +457,10 @@ async function handleGetAdSets(args: Record<string, unknown> | undefined): Promi
         : adset.lifetimeBudgetCents != null
           ? `$${(adset.lifetimeBudgetCents / 100).toFixed(2)} total`
           : 'No budget';
-      return `${i + 1}. ${adset.name}\n   ID: ${adset.id} | Campaign: ${adset.campaignId}\n   Status: ${adset.status} | Budget: ${budget}`;
+      const adsetStatusText = adset.effectiveStatus !== adset.status
+        ? `${adset.effectiveStatus} (configured: ${adset.status})`
+        : adset.effectiveStatus ?? adset.status;
+      return `${i + 1}. ${adset.name}\n   ID: ${adset.id} | Campaign: ${adset.campaignId}\n   Status: ${adsetStatusText} | Budget: ${budget}`;
     });
     return `Ad Sets${statusFilter} found (${d.count}):\n\n${lines.join('\n\n')}`;
   };
@@ -576,7 +587,10 @@ async function handleGetAds(args: Record<string, unknown> | undefined): Promise<
       return `No ads found ${status !== 'ALL' ? `with status "${status}" ` : ''}`;
     }
     const lines = d.items.map((ad, i) => {
-      return `${i + 1}. ${ad.name}\n   ID: ${ad.id} | AdSet: ${ad.adSetId}\n   Status: ${ad.status}${ad.creative?.title != null ? `\n   Title: ${ad.creative.title}` : ''}`;
+      const adStatusText = ad.effectiveStatus !== ad.status
+        ? `${ad.effectiveStatus} (configured: ${ad.status})`
+        : ad.effectiveStatus ?? ad.status;
+      return `${i + 1}. ${ad.name}\n   ID: ${ad.id} | AdSet: ${ad.adSetId}\n   Status: ${adStatusText}${ad.creative?.title != null ? `\n   Title: ${ad.creative.title}` : ''}`;
     });
     return `Ads${statusFilter} found (${d.count}):\n\n${lines.join('\n\n')}`;
   };
